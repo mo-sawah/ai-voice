@@ -57,7 +57,7 @@ class AIVoice_Metabox {
                 <option value="openai" <?php selected( $ai_service, 'openai' ); ?>>OpenAI</option>
             </select>
         </p>
-        <p class="ai-voice-setting-row-postbox" data-service="gemini" style="display:none;">
+        <p class="ai-voice-setting-row-postbox" data-service="gemini">
             <label for="ai_voice_gemini_tone"><strong>Gemini Tone</strong></label><br>
             <select name="ai_voice_gemini_tone" id="ai_voice_gemini_tone" style="width:100%;">
                 <option value="default" <?php selected( $gemini_tone, 'default' ); ?>>Use Global Setting</option>
@@ -67,7 +67,7 @@ class AIVoice_Metabox {
                 <option value="calm" <?php selected( $gemini_tone, 'calm' ); ?>>Calm & Soothing</option>
             </select>
         </p>
-         <p class="ai-voice-setting-row-postbox" data-service="google" style="display:none;">
+         <p class="ai-voice-setting-row-postbox" data-service="google">
             <label for="ai_voice_google_voice"><strong>Google Voice</strong></label><br>
             <select name="ai_voice_google_voice" id="ai_voice_google_voice" style="width:100%;">
                 <option value="default" <?php selected( $google_voice, 'default' ); ?>>Use Global Setting</option>
@@ -75,41 +75,22 @@ class AIVoice_Metabox {
                     <option value="en-US-Studio-M" <?php selected($google_voice, 'en-US-Studio-M'); ?>>Male</option>
                     <option value="en-US-Studio-O" <?php selected($google_voice, 'en-US-Studio-O'); ?>>Female</option>
                 </optgroup>
-                <optgroup label="English (US) - Neural2">
-                    <option value="en-US-Neural2-J" <?php selected($google_voice, 'en-US-Neural2-J'); ?>>Male 1</option>
-                    <option value="en-US-Neural2-A" <?php selected($google_voice, 'en-US-Neural2-A'); ?>>Male 2</option>
-                    <option value="en-US-Neural2-I" <?php selected($google_voice, 'en-US-Neural2-I'); ?>>Female 1</option>
-                    <option value="en-US-Neural2-C" <?php selected($google_voice, 'en-US-Neural2-C'); ?>>Female 2</option>
-                </optgroup>
-                <optgroup label="English (US) - WaveNet">
-                    <option value="en-US-Wavenet-D" <?php selected($google_voice, 'en-US-Wavenet-D'); ?>>Male 1</option>
-                    <option value="en-US-Wavenet-B" <?php selected($google_voice, 'en-US-Wavenet-B'); ?>>Male 2</option>
-                    <option value="en-US-Wavenet-F" <?php selected($google_voice, 'en-US-Wavenet-F'); ?>>Female 1</option>
-                    <option value="en-US-Wavenet-C" <?php selected($google_voice, 'en-US-Wavenet-C'); ?>>Female 2</option>
-                </optgroup>
             </select>
         </p>
-        <p class="ai-voice-setting-row-postbox" data-service="gemini" style="display:none;">
+        <p class="ai-voice-setting-row-postbox" data-service="gemini">
             <label for="ai_voice_gemini_voice"><strong>Gemini Voice</strong></label><br>
             <select name="ai_voice_gemini_voice" id="ai_voice_gemini_voice" style="width:100%;">
                 <option value="default" <?php selected( $gemini_voice, 'default' ); ?>>Use Global Setting</option>
                 <option value="Kore" <?php selected( $gemini_voice, 'Kore' ); ?>>Kore (Firm)</option>
                 <option value="Puck" <?php selected( $gemini_voice, 'Puck' ); ?>>Puck (Upbeat)</option>
-                <option value="Charon" <?php selected( $gemini_voice, 'Charon' ); ?>>Charon (Informative)</option>
-                <option value="Leda" <?php selected( $gemini_voice, 'Leda' ); ?>>Leda (Youthful)</option>
-                <option value="Enceladus" <?php selected( $gemini_voice, 'Enceladus' ); ?>>Enceladus (Breathy)</option>
             </select>
         </p>
-        <p class="ai-voice-setting-row-postbox" data-service="openai" style="display:none;">
+        <p class="ai-voice-setting-row-postbox" data-service="openai">
             <label for="ai_voice_openai_voice"><strong>OpenAI Voice</strong></label><br>
             <select name="ai_voice_openai_voice" id="ai_voice_openai_voice" style="width:100%;">
                 <option value="default" <?php selected( $openai_voice, 'default' ); ?>>Use Global Setting</option>
                 <option value="alloy" <?php selected( $openai_voice, 'alloy' ); ?>>Alloy</option>
-                <option value="echo" <?php selected( $openai_voice, 'echo' ); ?>>Echo</option>
-                <option value="fable" <?php selected( $openai_voice, 'fable' ); ?>>Fable</option>
-                <option value="onyx" <?php selected( $openai_voice, 'onyx' ); ?>>Onyx</option>
                 <option value="nova" <?php selected( $openai_voice, 'nova' ); ?>>Nova</option>
-                <option value="shimmer" <?php selected( $openai_voice, 'shimmer' ); ?>>Shimmer</option>
             </select>
         </p>
         <p>
@@ -145,3 +126,4 @@ class AIVoice_Metabox {
         }
     }
 }
+
