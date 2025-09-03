@@ -120,6 +120,13 @@
   margin: 0;
   padding-right: 1rem;
   line-height: 1.2;
+  color: var(--text-primary-light); /* Explicitly set light theme color */
+  transition: color 0.3s ease;
+}
+#ai-voice-player-wrapper
+  .ai-voice-player-container[data-theme="dark"]
+  .article-title {
+  color: var(--text-primary-dark); /* FIX: Set correct color for dark mode */
 }
 #ai-voice-player-wrapper .ai-logo-container {
   display: flex;
