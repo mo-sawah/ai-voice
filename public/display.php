@@ -145,8 +145,8 @@ class AIVoice_Public {
     }
     $final_text = $tone_prompt . $text_chunk;
 
-    // CORRECTED: Use the proper Gemini API endpoint for text-to-speech
-    $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' . $api_key;
+    // CORRECTED: Use the proper Gemini TTS model
+    $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' . $api_key;
     
     $body = [
         'contents' => [
