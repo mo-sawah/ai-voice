@@ -10,9 +10,8 @@ class AIVoice_Public {
 
     public function __construct() {
         $this->settings = get_option('ai_voice_settings');
-        add_filter( 'the_content', [ $this, 'maybe_display_player' ] );
+        add_filter( 'the_content', [ $this, 'maybe_display_player' ], 99 ); // Set priority to run later
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
-        // AJAX actions for on-demand generation
         add_action( 'wp_ajax_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
     }
@@ -32,14 +31,12 @@ class AIVoice_Public {
         
         $is_enabled_globally = isset($this->settings['enable_globally']) && $this->settings['enable_globally'] == '1';
 
-        // Decide if we should show the player
         if ($status === 'disabled' || ($status !== 'enabled' && !$is_enabled_globally)) {
             return $content;
         }
-
-        // Prepare scripts and data for the frontend
+        
         $this->prepare_frontend_scripts($post_id);
-
+        
         ob_start();
         include( AI_VOICE_PLUGIN_DIR . 'public/partials/player-template.php' );
         $player_html = ob_get_clean();
@@ -54,24 +51,30 @@ class AIVoice_Public {
         if (!$post_id) {
             wp_send_json_error( [ 'message' => 'Invalid Post ID.' ] );
         }
+        
+        $text_to_speak = isset($_POST['text_to_speak']) ? wp_kses_post(stripslashes($_POST['text_to_speak'])) : '';
+        if (empty(trim($text_to_speak))) {
+            wp_send_json_error( [ 'message' => 'No visible text content was found to read.' ] );
+        }
 
-        $generation_result = $this->generate_audio($post_id);
+        $generation_result = $this->generate_audio($post_id, $text_to_speak);
 
         if (is_wp_error($generation_result)) {
             wp_send_json_error( [ 'message' => $generation_result->get_error_message() ] );
         } else {
-            // Success, send back the URL
             wp_send_json_success( [ 'audioUrl' => $generation_result ] );
         }
     }
     
-    private function generate_audio($post_id) {
-        // This function remains largely the same as the previous correct version...
-        // ...but we add the metadata generation part with the fix.
+    private function generate_audio($post_id, $text_to_speak) {
+        $content_hash = md5($text_to_speak);
+        $cached_audio_url = get_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, true);
+
+        if (!empty($cached_audio_url)) {
+            return $cached_audio_url;
+        }
+
         $post = get_post($post_id);
-        $text_to_speak = wp_strip_all_tags(strip_shortcodes($post->post_content));
-        
-        if (empty(trim($text_to_speak))) return new WP_Error('empty_content', 'The post content is empty.');
 
         $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
         if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
@@ -84,7 +87,7 @@ class AIVoice_Public {
 
         if ($ai_service === 'google') {
             $voice_id = get_post_meta($post_id, '_ai_voice_google_voice', true) ?: ($this->settings['google_voice'] ?? 'en-US-Studio-O');
-             if ($voice_id === 'default') $voice_id = $this->settings['google_voice'] ?? 'en-US-Studio-O';
+            if ($voice_id === 'default') $voice_id = $this->settings['google_voice'] ?? 'en-US-Studio-O';
 
             $api_url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $api_key;
             $body = ['input' => ['text' => substr($text_to_speak, 0, 5000)], 'voice' => ['languageCode' => substr($voice_id, 0, 5), 'name' => $voice_id], 'audioConfig' => ['audioEncoding' => 'MP3']];
@@ -99,7 +102,7 @@ class AIVoice_Public {
 
         } else { // OpenAI
             $voice_id = get_post_meta($post_id, '_ai_voice_openai_voice', true) ?: ($this->settings['openai_voice'] ?? 'nova');
-             if ($voice_id === 'default') $voice_id = $this->settings['openai_voice'] ?? 'nova';
+            if ($voice_id === 'default') $voice_id = $this->settings['openai_voice'] ?? 'nova';
 
             $api_url = 'https://api.openai.com/v1/audio/speech';
             $body = ['model' => 'tts-1', 'input' => substr($text_to_speak, 0, 4096), 'voice' => $voice_id];
@@ -121,14 +124,12 @@ class AIVoice_Public {
         $attachment = ['guid' => $upload['url'], 'post_mime_type' => 'audio/mpeg', 'post_title' => 'AI Voice for ' . $post->post_title, 'post_content' => '', 'post_status' => 'inherit'];
         $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
         
-        // --- FIX for FATAL ERROR ---
-        require_once(ABSPATH . 'wp-admin/includes/media.php'); // Ensure wp_read_audio_metadata is available
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
         require_once(ABSPATH . 'wp-admin/includes/image.php');
         $attach_data = wp_generate_attachment_metadata($attach_id, $upload['file']);
         wp_update_attachment_metadata($attach_id, $attach_data);
 
-        update_post_meta($post_id, '_ai_voice_audio_url', $upload['url']);
-        update_post_meta($post_id, '_ai_voice_content_hash', md5($text_to_speak));
+        update_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, $upload['url']);
 
         return $upload['url'];
     }
@@ -136,26 +137,6 @@ class AIVoice_Public {
     private function prepare_frontend_scripts($post_id) {
         wp_enqueue_style('ai-voice-player-css');
         wp_enqueue_script('ai-voice-player-js');
-
-        $audio_url = get_post_meta($post_id, '_ai_voice_audio_url', true);
-        $current_content_hash = md5(get_the_content($post_id));
-        $last_content_hash = get_post_meta($post_id, '_ai_voice_content_hash', true);
-        
-        $audio_duration = 0;
-        // If content is unchanged and URL exists, it's cached.
-        if (!empty($audio_url) && $current_content_hash === $last_content_hash) {
-            // Get duration from cached file
-            $attachment_id = attachment_url_to_postid($audio_url);
-            if ($attachment_id) {
-                $metadata = wp_get_attachment_metadata($attachment_id);
-                if (isset($metadata['length'])) {
-                    $audio_duration = $metadata['length'];
-                }
-            }
-        } else {
-            // Content has changed, so the old URL is invalid.
-            $audio_url = '';
-        }
 
         $theme = get_post_meta($post_id, '_ai_voice_theme', true) ?: ($this->settings['theme'] ?? 'light');
         if ($theme === 'default') $theme = $this->settings['theme'] ?? 'light';
@@ -167,14 +148,10 @@ class AIVoice_Public {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('ai_voice_nonce'),
             'post_id' => $post_id,
-            'audioUrl' => esc_url($audio_url),
-            'duration' => $audio_duration,
             'title' => get_the_title($post_id),
             'theme' => esc_attr($theme),
             'aiService' => esc_attr($ai_service),
         ]);
-        
-        // Dynamic CSS (remains unchanged)
     }
 }
 

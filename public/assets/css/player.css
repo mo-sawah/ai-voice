@@ -26,6 +26,8 @@
 #ai-voice-player-wrapper {
   font-family: "Inter", sans-serif;
   margin-bottom: 1.5rem;
+  position: relative; /* Add position */
+  z-index: 1000; /* Add a high z-index */
 }
 
 #ai-voice-player-wrapper .ai-voice-player-container {
@@ -139,55 +141,59 @@
   gap: 0.75rem;
   margin-top: 0.25rem;
 }
+
 #ai-voice-player-wrapper .time-display {
-  color: var(--text-secondary-light);
   font-size: 0.75rem;
-  font-family: monospace;
+  color: var(--text-secondary-light);
+  flex-shrink: 0;
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
   .time-display {
   color: var(--text-secondary-dark);
 }
-#ai-voice-player-wrapper .progress-bar-wrapper {
+
+#ai-voice-player-wrapper .progress-bar-container {
+  flex-grow: 1;
   position: relative;
-  width: 100%;
-  height: 1rem;
+  height: 16px;
   display: flex;
   align-items: center;
 }
 
-/* --- Custom Progress Bar --- */
+/* --- Custom Progress Bar (User-Improved Cross-Browser Solution) --- */
 #ai-voice-player-wrapper input[type="range"].progress-bar {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 6px;
-  background: var(--bg-secondary-light);
+  background: var(--bg-secondary-light); /* Uses theme color */
   outline: none;
   border-radius: 3px;
   cursor: pointer;
   margin: 0;
   padding: 0;
   position: absolute;
-  border: none !important; /* FIX 2: Override theme border */
+  border: none !important;
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
   input[type="range"].progress-bar {
-  background: var(--bg-secondary-dark);
+  background: var(--bg-secondary-dark); /* Uses theme color */
 }
+
+/* Webkit (Chrome, Safari, Edge) */
 #ai-voice-player-wrapper
   input[type="range"].progress-bar::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
   height: 16px;
-  background: var(--accent-light);
+  background: var(--accent-light); /* Uses theme color */
   border-radius: 50%;
-  border: 2px solid var(--bg-light);
+  border: 2px solid var(--bg-light); /* Uses theme color */
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-  margin-top: -7px; /* FIX 1: Vertically center the knob */
+  margin-top: -5px; /* Fine-tuned alignment */
   transition: transform 0.2s ease;
 }
 #ai-voice-player-wrapper
@@ -196,6 +202,24 @@
   background: var(--accent-dark);
   border-color: var(--bg-dark);
 }
+
+/* Firefox */
+#ai-voice-player-wrapper input[type="range"].progress-bar::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent-light); /* Uses theme color */
+  border-radius: 50%;
+  border: 2px solid var(--bg-light); /* Uses theme color */
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+#ai-voice-player-wrapper
+  .ai-voice-player-container[data-theme="dark"]
+  input[type="range"].progress-bar::-moz-range-thumb {
+  background: var(--accent-dark);
+  border-color: var(--bg-dark);
+}
+
 #ai-voice-player-wrapper
   input[type="range"].progress-bar:hover::-webkit-slider-thumb {
   transform: scale(1.1);

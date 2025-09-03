@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const wrapper = document.getElementById("ai-voice-player-wrapper");
   if (!wrapper || typeof aiVoiceData === "undefined") return;
 
-  // --- DOM ELEMENTS ---
+  // --- DOM ELEMENTS (no changes) ---
   const playerContainer = wrapper.querySelector(".ai-voice-player-container");
   const playPauseBtn = wrapper.querySelector("#ai-voice-play-pause-btn");
   const playIcon = wrapper.querySelector("#ai-voice-play-icon");
@@ -21,13 +21,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const speedModal = wrapper.querySelector("#ai-voice-speed-modal");
   const voiceModal = wrapper.querySelector("#ai-voice-voice-modal");
 
-  // --- AUDIO & STATE ---
+  // --- AUDIO & STATE (no changes) ---
   const audio = new Audio();
   let isGenerating = false;
   let currentTheme = aiVoiceData.theme || "light";
   let currentSpeed = 1.0;
-
-  // --- MOCK VOICE DATA (for UI display) ---
   const voices = {
     google: [
       { id: "en-US-Studio-O", name: "Studio (Female)" },
@@ -44,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ],
   };
 
-  // --- FUNCTIONS ---
+  // --- FUNCTIONS (with updates) ---
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds < 0) return "0:00";
     const minutes = Math.floor(seconds / 60);
@@ -74,11 +72,44 @@ document.addEventListener("DOMContentLoaded", () => {
     audio.paused ? audio.play() : audio.pause();
   };
 
+  const getVisibleText = () => {
+    // Find the most likely main content area of the article
+    let contentNode = wrapper.closest("article, .post, .entry-content, main");
+    if (!contentNode) {
+      // Fallback to the player's parent if a specific container isn't found
+      contentNode = wrapper.parentElement;
+    }
+
+    // Clone the node to avoid modifying the live page
+    const clone = contentNode.cloneNode(true);
+
+    // Remove the player itself and any scripts from the cloned content
+    const playerClone = clone.querySelector("#ai-voice-player-wrapper");
+    if (playerClone) playerClone.remove();
+    clone
+      .querySelectorAll('script, style, noscript, .ads, [aria-hidden="true"]')
+      .forEach((el) => el.remove());
+
+    // Return the cleaned, visible text
+    return clone.textContent.replace(/\s+/g, " ").trim();
+  };
+
   const generateAudio = () => {
     isGenerating = true;
     playPauseBtn.disabled = true;
     playIcon.style.display = "none";
     loader.style.display = "block";
+
+    const textToSpeak = getVisibleText();
+
+    if (!textToSpeak) {
+      isGenerating = false;
+      playPauseBtn.disabled = false;
+      loader.style.display = "none";
+      articleTitleEl.textContent = "No text found on page.";
+      playIcon.style.display = "block";
+      return;
+    }
 
     jQuery.post(
       aiVoiceData.ajax_url,
@@ -86,6 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
         action: "ai_voice_generate_audio",
         nonce: aiVoiceData.nonce,
         post_id: aiVoiceData.post_id,
+        text_to_speak: textToSpeak,
       },
       function (response) {
         isGenerating = false;
@@ -116,6 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateProgressBarUI();
   };
 
+  // --- Other functions (updateAILogo, setupSpeedModal, setupVoiceModal) are unchanged ---
   const updateAILogo = () => {
     const service = aiVoiceData.aiService || "google";
     if (service === "google") {
@@ -124,7 +157,6 @@ document.addEventListener("DOMContentLoaded", () => {
       aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 41 41" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M35.65,10.96a16.5,16.5,0,0,0-23.33,0L5,18.29l7.33-7.33a16.5,16.5,0,0,0,23.33,0l4.95,4.95-4.95-4.95ZM12.33,29.32,5,22,18.29,35.31a16.48,16.48,0,0,0,11-4.8L22,22Z" ></path></svg><span>Voiced by OpenAI</span>`;
     }
   };
-
   const setupSpeedModal = () => {
     const speedContainer = speedModal.querySelector("#ai-voice-speed-options");
     speedContainer.innerHTML = "";
@@ -141,20 +173,19 @@ document.addEventListener("DOMContentLoaded", () => {
       speedContainer.appendChild(btn);
     });
   };
-
   const setupVoiceModal = () => {
     const voiceContainer = voiceModal.querySelector("#ai-voice-voice-options");
     voiceContainer.innerHTML = "";
     const currentVoices = voices[aiVoiceData.aiService] || voices.google;
     currentVoices.forEach((voice, index) => {
       const btn = document.createElement("button");
-      btn.className = index === 0 ? "active" : ""; // Placeholder active state
+      btn.className = index === 0 ? "active" : "";
       btn.textContent = voice.name;
       voiceContainer.appendChild(btn);
     });
   };
 
-  // --- EVENT LISTENERS ---
+  // --- EVENT LISTENERS (no changes) ---
   playPauseBtn.addEventListener("click", togglePlayPause);
   audio.addEventListener("play", () => {
     playIcon.style.display = "none";
@@ -187,7 +218,6 @@ document.addEventListener("DOMContentLoaded", () => {
   themeToggle.addEventListener("click", () =>
     updateTheme(currentTheme === "light" ? "dark" : "light")
   );
-
   speedBtn.addEventListener("click", () => {
     setupSpeedModal();
     speedModal.style.display = "flex";
@@ -203,18 +233,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target === voiceModal) voiceModal.style.display = "none";
   });
 
-  // --- INITIALIZATION ---
+  // --- INITIALIZATION (simplified) ---
   updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.title;
-
-  if (aiVoiceData.audioUrl) {
-    audio.src = aiVoiceData.audioUrl;
-    if (aiVoiceData.duration > 0) {
-      totalTimeEl.textContent = formatTime(aiVoiceData.duration);
-      progressBar.max = aiVoiceData.duration;
-    }
-  }
-
   updateProgressBarUI();
 });
