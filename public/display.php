@@ -98,7 +98,7 @@ class AIVoice_Public {
         $args = ['timeout' => 30];
 
         if ($ai_service === 'google') {
-            // Google Cloud TTS Logic
+            // Google Cloud TTS Logic (unchanged)
         } else if ($ai_service === 'gemini') {
             $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
             if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
@@ -125,12 +125,18 @@ class AIVoice_Public {
             $response = wp_remote_post($api_url, $args);
 
             if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Gemini API Error: ' . $response->get_error_message());
+            
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) return new WP_Error('gemini_api_error', 'Gemini API Error: ' . ($response_data['error']['message'] ?? 'Unknown error or no audio content.'));
+            
+            // --- BUG FIX IS HERE ---
+            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
+                $error_message = $response_data['error']['message'] ?? 'Unknown error. The API response structure might have changed or your API key may be invalid.';
+                return new WP_Error('gemini_api_error', 'Gemini API Error: ' . $error_message);
+            }
             $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
             
         } else { // OpenAI
-            // OpenAI Logic
+            // OpenAI Logic (unchanged)
         }
 
         if (empty($response_body)) return new WP_Error('api_empty_response', 'API returned empty audio.');
