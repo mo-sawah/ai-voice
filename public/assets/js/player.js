@@ -24,8 +24,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const articleTitleEl = playerWrapper.querySelector("#ai-voice-article-title");
 
   // --- AUDIO & STATE ---
-  const audio = new Audio(aiVoiceData.audioUrl);
+  const audio = new Audio();
   let isPlaying = false;
+  let isGenerating = false;
   let currentTheme = aiVoiceData.theme || "light";
   let currentSpeed = 1.0;
 
@@ -49,6 +50,14 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const togglePlayPause = () => {
+    if (isGenerating) return;
+
+    // If audio source is not set, generate it first.
+    if (!audio.src) {
+      generateAudio();
+      return;
+    }
+
     if (audio.paused) {
       audio.play();
     } else {
@@ -56,10 +65,41 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const generateAudio = () => {
+    isGenerating = true;
+    playPauseBtn.disabled = true;
+    const originalTitle = articleTitleEl.textContent;
+    articleTitleEl.textContent =
+      aiVoiceData.generatingText || "Generating Audio...";
+    playIcon.style.display = "none";
+    pauseIcon.style.display = "none";
+
+    // Use jQuery for WordPress AJAX compatibility
+    jQuery.post(
+      aiVoiceData.ajax_url,
+      {
+        action: "ai_voice_generate_audio",
+        nonce: aiVoiceData.nonce,
+        post_id: aiVoiceData.post_id,
+      },
+      function (response) {
+        isGenerating = false;
+        playPauseBtn.disabled = false;
+        if (response.success) {
+          audio.src = response.data.audioUrl;
+          audio.play();
+          articleTitleEl.textContent = originalTitle;
+        } else {
+          articleTitleEl.textContent = aiVoiceData.errorText || "Error";
+          console.error("AI Voice Error:", response.data.message);
+        }
+      }
+    );
+  };
+
   const updateTheme = (theme) => {
     currentTheme = theme;
     playerContainer.dataset.theme = theme;
-    // In a real plugin, you might save this preference in localStorage
     if (theme === "dark") {
       sunIcon.style.display = "none";
       moonIcon.style.display = "block";
@@ -103,8 +143,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   progressBar.addEventListener("input", (e) => {
-    audio.currentTime = e.target.value;
-    updateProgressBarUI();
+    if (audio.src) {
+      audio.currentTime = e.target.value;
+      updateProgressBarUI();
+    }
   });
 
   themeToggle.addEventListener("click", () => {
@@ -121,9 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // --- INITIALIZATION ---
-  updateTheme(currentTheme); // Set initial theme
+  updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.title;
-  // The voice modal is removed from the player UI, as changing voice requires regeneration,
-  // which is a complex UX for the frontend player. Voice is set in the backend.
 });
