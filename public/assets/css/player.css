@@ -186,7 +186,7 @@
   border-radius: 50%;
   border: 2px solid var(--bg-light);
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-  margin-top: -5px;
+  margin-top: -7px;
   transition: transform 0.2s ease;
 }
 #ai-voice-player-wrapper
@@ -206,7 +206,7 @@
   align-items: center;
   gap: 0.25rem;
   border-left: 1px solid var(--border-light);
-  padding-left: 0.75rem;
+  padding-left: 1rem;
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
@@ -224,6 +224,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
+  box-shadow: none !important;
 }
 #ai-voice-player-wrapper .control-button svg {
   display: block;
