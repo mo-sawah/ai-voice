@@ -105,7 +105,11 @@ class AIVoice_Public {
             
             $api_url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $api_key;
             $body = ['input' => ['text' => substr($text_to_speak, 0, 5000)], 'voice' => ['languageCode' => substr($voice_id, 0, 5), 'name' => $voice_id], 'audioConfig' => ['audioEncoding' => 'MP3']];
-            $response = wp_remote_post($api_url, ['body' => json_encode($body), 'headers' => ['Content-Type' => 'application/json']]);
+            $response = wp_remote_post($api_url, [
+                'body' => json_encode($body), 
+                'headers' => ['Content-Type' => 'application/json'],
+                'timeout' => 30 // Increased timeout from 5 to 30 seconds
+            ]);
             
             if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Could not connect to Google API: ' . $response->get_error_message());
             
@@ -122,7 +126,14 @@ class AIVoice_Public {
             
             $api_url = 'https://api.openai.com/v1/audio/speech';
             $body = ['model' => 'tts-1', 'input' => substr($text_to_speak, 0, 4096), 'voice' => $voice_id];
-            $response = wp_remote_post($api_url, ['body' => json_encode($body), 'headers' => ['Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json']]);
+            $response = wp_remote_post($api_url, [
+                'body' => json_encode($body), 
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $api_key, 
+                    'Content-Type' => 'application/json'
+                ],
+                'timeout' => 30 // Increased timeout from 5 to 30 seconds
+            ]);
             
             if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Could not connect to OpenAI API: ' . $response->get_error_message());
             
