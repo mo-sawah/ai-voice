@@ -129,7 +129,24 @@ class AIVoice_Public {
         $response_body = null;
         $args = ['timeout' => 25];
 
-        if ($ai_service === 'gemini') {
+        if ($ai_service === 'google') {
+            $voice_id = get_post_meta($post_id, '_ai_voice_google_voice', true) ?: ($this->settings['google_voice'] ?? 'en-US-Studio-O');
+            if ($voice_id === 'default') $voice_id = $this->settings['google_voice'] ?? 'en-US-Studio-O';
+
+            $api_url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $api_key;
+            $body = ['input' => ['text' => $text_chunk], 'voice' => ['languageCode' => substr($voice_id, 0, 5), 'name' => $voice_id], 'audioConfig' => ['audioEncoding' => 'MP3']];
+            $args['body'] = json_encode($body);
+            $args['headers'] = ['Content-Type' => 'application/json'];
+            $response = wp_remote_post($api_url, $args);
+
+            if (is_wp_error($response)) return $response;
+            $response_data = json_decode(wp_remote_retrieve_body($response), true);
+            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['audioContent'])) {
+                 return new WP_Error('google_api_error', 'Google API Error: ' . ($response_data['error']['message'] ?? 'Unknown error.'));
+            }
+            $response_body = base64_decode($response_data['audioContent']);
+
+        } else if ($ai_service === 'gemini') {
             $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
             if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
             
@@ -144,7 +161,6 @@ class AIVoice_Public {
             }
             $final_text = $tone_prompt . $text_chunk;
 
-            // --- THE FIX IS HERE: Correct Model Name and API Endpoint ---
             $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' . $api_key;
             $body = [
                 'model' => 'gemini-2.5-flash-preview-tts',
@@ -167,8 +183,24 @@ class AIVoice_Public {
                 return new WP_Error('gemini_api_error', 'Gemini API Error: ' . $error_message);
             }
             $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
+
+        } else if ($ai_service === 'openai') {
+            $voice_id = get_post_meta($post_id, '_ai_voice_openai_voice', true) ?: ($this->settings['openai_voice'] ?? 'nova');
+            if ($voice_id === 'default') $voice_id = $this->settings['openai_voice'] ?? 'nova';
+
+            $api_url = 'https://api.openai.com/v1/audio/speech';
+            $body = ['model' => 'tts-1', 'input' => $text_chunk, 'voice' => $voice_id];
+            $args['body'] = json_encode($body);
+            $args['headers'] = ['Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'];
+            $response = wp_remote_post($api_url, $args);
+
+            if (is_wp_error($response)) return $response;
+            $response_code = wp_remote_retrieve_response_code($response);
+            if ($response_code !== 200) {
+                 return new WP_Error('openai_api_error', 'OpenAI API Error: ' . (json_decode(wp_remote_retrieve_body($response), true)['error']['message'] ?? 'Unknown error.'));
+            }
+            $response_body = wp_remote_retrieve_body($response);
         }
-        // ... (add similar logic for 'google' and 'openai' if needed)
 
         if (empty($response_body)) return new WP_Error('api_empty_chunk_response', 'API returned empty audio for a chunk.');
 
@@ -198,3 +230,4 @@ class AIVoice_Public {
         ]);
     }
 }
+
