@@ -30,9 +30,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- MOCK VOICE DATA (for UI display) ---
   const voices = {
     google: [
-      { id: "en-US-Wavenet-F", name: "Aria (Female)" },
-      { id: "en-US-Wavenet-D", name: "Leo (Male)" },
-      { id: "en-GB-Wavenet-A", name: "Amelia (UK)" },
+      { id: "en-US-Studio-O", name: "Studio (Female)" },
+      { id: "en-US-Neural2-J", name: "Neural (Male)" },
+      { id: "en-US-Wavenet-F", name: "WaveNet (Female)" },
     ],
     openai: [
       { id: "alloy", name: "Alloy" },
@@ -46,7 +46,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- FUNCTIONS ---
   const formatTime = (seconds) => {
-    if (isNaN(seconds)) return "0:00";
+    if (isNaN(seconds) || seconds < 0) return "0:00";
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
@@ -145,8 +145,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const setupVoiceModal = () => {
     const voiceContainer = voiceModal.querySelector("#ai-voice-voice-options");
     voiceContainer.innerHTML = "";
-    // Note: This is for display only. Changing voice would require re-generating audio.
-    // This is a placeholder for future enhancement.
     const currentVoices = voices[aiVoiceData.aiService] || voices.google;
     currentVoices.forEach((voice, index) => {
       const btn = document.createElement("button");
@@ -209,5 +207,14 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.title;
-  updateProgressBarUI(); // FIX 3: Set initial progress bar color on load
+
+  if (aiVoiceData.audioUrl) {
+    audio.src = aiVoiceData.audioUrl;
+    if (aiVoiceData.duration > 0) {
+      totalTimeEl.textContent = formatTime(aiVoiceData.duration);
+      progressBar.max = aiVoiceData.duration;
+    }
+  }
+
+  updateProgressBarUI();
 });
