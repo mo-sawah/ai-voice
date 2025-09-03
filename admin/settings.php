@@ -35,6 +35,7 @@ class AIVoice_Settings {
 
     public function render_settings_page() {
         $options = get_option( 'ai_voice_settings' );
+        $google_voices = $this->get_google_voices();
         ?>
         <div class="wrap">
             <h1>AI Voice Settings</h1>
@@ -72,6 +73,16 @@ class AIVoice_Settings {
                             <td><input type="checkbox" name="ai_voice_settings[enable_globally]" value="1" <?php checked( isset($options['enable_globally']) ? $options['enable_globally'] : 0, 1 ); ?>> <span class="description">Enable the audio player on all posts by default.</span></td>
                         </tr>
                         <tr>
+                            <th scope="row"><label for="ai_voice_settings[generation_method]">Generation Method</label></th>
+                            <td>
+                                <select name="ai_voice_settings[generation_method]">
+                                    <option value="chunked" <?php selected( $options['generation_method'] ?? 'chunked', 'chunked' ); ?>>Reliable (Chunking)</option>
+                                    <option value="single" <?php selected( $options['generation_method'] ?? 'chunked', 'single' ); ?>>Fast (Single Request)</option>
+                                </select>
+                                <p class="description">"Reliable" is recommended for most servers to avoid timeouts. "Fast" is quicker but may fail on some web hosts.</p>
+                            </td>
+                        </tr>
+                        <tr>
                             <th scope="row"><label for="ai_voice_settings[default_ai]">Default AI Service</label></th>
                             <td>
                                 <select id="ai_voice_default_ai_service" name="ai_voice_settings[default_ai]">
@@ -97,22 +108,16 @@ class AIVoice_Settings {
                             <th scope="row"><label for="ai_voice_settings[google_voice]">Default Google Voice</label></th>
                             <td>
                                 <select name="ai_voice_settings[google_voice]">
-                                    <optgroup label="English (US) - Studio">
-                                        <option value="en-US-Studio-M" <?php selected($options['google_voice'] ?? '', 'en-US-Studio-M'); ?>>Male</option>
-                                        <option value="en-US-Studio-O" <?php selected($options['google_voice'] ?? '', 'en-US-Studio-O'); ?>>Female</option>
-                                    </optgroup>
-                                    <optgroup label="English (US) - Neural2">
-                                        <option value="en-US-Neural2-J" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-J'); ?>>Male 1</option>
-                                        <option value="en-US-Neural2-A" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-A'); ?>>Male 2</option>
-                                        <option value="en-US-Neural2-I" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-I'); ?>>Female 1</option>
-                                        <option value="en-US-Neural2-C" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-C'); ?>>Female 2</option>
-                                    </optgroup>
-                                    <optgroup label="English (US) - WaveNet">
-                                        <option value="en-US-Wavenet-D" <?php selected($options['google_voice'] ?? 'en-US-Wavenet-D', 'en-US-Wavenet-D'); ?>>Male 1</option>
-                                        <option value="en-US-Wavenet-B" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-B'); ?>>Male 2</option>
-                                        <option value="en-US-Wavenet-F" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-F'); ?>>Female 1</option>
-                                        <option value="en-US-Wavenet-C" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-C'); ?>>Female 2</option>
-                                    </optgroup>
+                                    <?php
+                                    $current_google_voice = $options['google_voice'] ?? 'en-US-Studio-O';
+                                    foreach ($google_voices as $group => $voices) {
+                                        echo '<optgroup label="' . esc_attr($group) . '">';
+                                        foreach ($voices as $id => $name) {
+                                            echo '<option value="' . esc_attr($id) . '" ' . selected($current_google_voice, $id, false) . '>' . esc_html($name) . '</option>';
+                                        }
+                                        echo '</optgroup>';
+                                    }
+                                    ?>
                                 </select>
                             </td>
                         </tr>
@@ -179,6 +184,70 @@ class AIVoice_Settings {
             </form>
         </div>
         <?php
+    }
+
+    public function get_google_voices() {
+        return [
+            'English (US) - Premium' => [
+                'en-US-Studio-O' => 'Female (Studio)',
+                'en-US-Studio-M' => 'Male (Studio)',
+                'en-US-Journey-D' => 'Male (Journey)',
+                'en-US-Journey-F' => 'Female (Journey)',
+            ],
+            'English (US) - High Quality' => [
+                'en-US-Neural2-A' => 'Male A (Neural2)',
+                'en-US-Neural2-C' => 'Female C (Neural2)',
+                'en-US-Neural2-D' => 'Male D (Neural2)',
+                'en-US-Neural2-F' => 'Female F (Neural2)',
+                'en-US-Neural2-G' => 'Female G (Neural2)',
+                'en-US-Neural2-H' => 'Female H (Neural2)',
+                'en-US-Neural2-I' => 'Male I (Neural2)',
+                'en-US-Neural2-J' => 'Male J (Neural2)',
+            ],
+            'English (UK) - Premium' => [
+                'en-GB-Studio-B' => 'Male (Studio)',
+                'en-GB-Studio-C' => 'Female (Studio)',
+                'en-GB-Neural2-A' => 'Female A (Neural2)',
+                'en-GB-Neural2-B' => 'Male B (Neural2)',
+                'en-GB-Neural2-C' => 'Female C (Neural2)',
+                'en-GB-Neural2-D' => 'Male D (Neural2)',
+                'en-GB-Neural2-F' => 'Female F (Neural2)',
+            ],
+            'English (Australia)' => [
+                'en-AU-Neural2-A' => 'Female A (Neural2)',
+                'en-AU-Neural2-B' => 'Male B (Neural2)',
+                'en-AU-Neural2-C' => 'Female C (Neural2)',
+                'en-AU-Neural2-D' => 'Male D (Neural2)',
+            ],
+            'French (France)' => [
+                'fr-FR-Neural2-A' => 'Female A',
+                'fr-FR-Neural2-B' => 'Male B',
+                'fr-FR-Neural2-C' => 'Female C',
+                'fr-FR-Neural2-D' => 'Male D',
+            ],
+            'German (Germany)' => [
+                'de-DE-Neural2-B' => 'Male B',
+                'de-DE-Neural2-C' => 'Female C',
+                'de-DE-Neural2-D' => 'Male D',
+                'de-DE-Neural2-F' => 'Female F',
+            ],
+            'Spanish (Spain)' => [
+                'es-ES-Neural2-A' => 'Female A',
+                'es-ES-Neural2-B' => 'Male B',
+                'es-ES-Neural2-C' => 'Female C',
+                'es-ES-Neural2-D' => 'Male D',
+                'es-ES-Neural2-F' => 'Female F',
+            ],
+             'Portuguese (Brazil)' => [
+                'pt-BR-Neural2-A' => 'Female A',
+                'pt-BR-Neural2-B' => 'Male B',
+                'pt-BR-Neural2-C' => 'Female C',
+            ],
+            'Italian (Italy)' => [
+                'it-IT-Neural2-A' => 'Female A',
+                'it-IT-Neural2-C' => 'Male C',
+            ]
+        ];
     }
 }
 
