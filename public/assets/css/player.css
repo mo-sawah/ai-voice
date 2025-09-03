@@ -103,8 +103,8 @@
 /* --- Info, Title & Progress --- */
 #ai-voice-player-wrapper .info-progress-container {
   flex-grow: 1;
-  width: 100%;
   overflow: hidden;
+  min-width: 0; /* THE FIX: Allows this flex item to shrink and prevents overflow */
 }
 #ai-voice-player-wrapper .title-logo-flex {
   display: flex;
@@ -231,7 +231,8 @@
   align-items: center;
   gap: 0.25rem;
   border-left: 1px solid var(--border-light);
-  padding-left: 1rem; /* FIX: Added padding for right timer */
+  padding-left: 1rem;
+  flex-shrink: 0; /* Add this to prevent this container from shrinking */
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
