@@ -53,7 +53,9 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const updateProgressBarUI = () => {
-    const percentage = (audio.currentTime / audio.duration) * 100;
+    const percentage = audio.duration
+      ? (audio.currentTime / audio.duration) * 100
+      : 0;
     const accentColor =
       currentTheme === "light" ? "var(--accent-light)" : "var(--accent-dark)";
     const bgColor =
@@ -207,4 +209,5 @@ document.addEventListener("DOMContentLoaded", () => {
   updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.title;
+  updateProgressBarUI(); // FIX 3: Set initial progress bar color on load
 });

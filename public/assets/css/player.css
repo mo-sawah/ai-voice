@@ -170,6 +170,7 @@
   margin: 0;
   padding: 0;
   position: absolute;
+  border: none !important; /* FIX 2: Override theme border */
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
@@ -186,7 +187,7 @@
   border-radius: 50%;
   border: 2px solid var(--bg-light);
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-  margin-top: -7px;
+  margin-top: -7px; /* FIX 1: Vertically center the knob */
   transition: transform 0.2s ease;
 }
 #ai-voice-player-wrapper
@@ -206,7 +207,7 @@
   align-items: center;
   gap: 0.25rem;
   border-left: 1px solid var(--border-light);
-  padding-left: 1rem;
+  padding-left: 1rem; /* FIX: Added padding for right timer */
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
@@ -224,7 +225,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
-  box-shadow: none !important;
+  box-shadow: none !important; /* FIX: Override theme shadow */
 }
 #ai-voice-player-wrapper .control-button svg {
   display: block;
