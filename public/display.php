@@ -56,8 +56,8 @@ class AIVoice_Public {
         if (empty(trim($text_to_speak))) {
             wp_send_json_error( [ 'message' => 'No visible text content was found to read.' ] );
         }
-
-        $generation_result = $this->generate_audio($post_id, $text_to_speak);
+        
+        $generation_result = $this->generate_chunked_audio($post_id, $text_to_speak);
 
         if (is_wp_error($generation_result)) {
             wp_send_json_error( [ 'message' => $generation_result->get_error_message() ] );
@@ -65,26 +65,58 @@ class AIVoice_Public {
             wp_send_json_success( [ 'audioUrl' => $generation_result ] );
         }
     }
-    
-    private function generate_audio($post_id, $text_to_speak) {
-        $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
-        if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
-        
-        $content_hash_text = $text_to_speak;
 
-        if ($ai_service === 'gemini') {
-            $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
-            if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
-            $content_hash_text .= $gemini_tone;
-        }
-
-        $content_hash = md5($content_hash_text);
+    private function generate_chunked_audio($post_id, $text_to_speak) {
+        $content_hash = md5($text_to_speak);
         $cached_audio_url = get_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, true);
-
         if (!empty($cached_audio_url)) {
             return $cached_audio_url;
         }
 
+        $text_chunks = preg_split('/(?<=[.?!])\s+/', $text_to_speak, -1, PREG_SPLIT_NO_EMPTY);
+        $audio_files = [];
+        $upload_dir = wp_upload_dir();
+
+        foreach ($text_chunks as $chunk) {
+            $chunk_result = $this->generate_audio_for_chunk($post_id, $chunk);
+            if (is_wp_error($chunk_result)) {
+                return $chunk_result;
+            }
+            $audio_files[] = $chunk_result;
+        }
+        
+        if (empty($audio_files)) {
+             return new WP_Error('no_audio_generated', 'Could not generate any audio chunks.');
+        }
+
+        $final_audio_content = '';
+        foreach ($audio_files as $file_path) {
+            $final_audio_content .= file_get_contents($file_path);
+            unlink($file_path);
+        }
+        
+        $final_filename = 'ai-voice-' . $post_id . '-' . time() . '.mp3';
+        $final_filepath = $upload_dir['path'] . '/' . $final_filename;
+        $final_fileurl = $upload_dir['url'] . '/' . $final_filename;
+
+        file_put_contents($final_filepath, $final_audio_content);
+
+        $attachment = ['guid' => $final_fileurl, 'post_mime_type' => 'audio/mpeg', 'post_title' => 'AI Voice for ' . get_the_title($post_id), 'post_content' => '', 'post_status' => 'inherit'];
+        $attach_id = wp_insert_attachment($attachment, $final_filepath, $post_id);
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+        $attach_data = wp_generate_attachment_metadata($attach_id, $final_filepath);
+        wp_update_attachment_metadata($attach_id, $attach_data);
+
+        update_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, $final_fileurl);
+
+        return $final_fileurl;
+    }
+    
+    private function generate_audio_for_chunk($post_id, $text_chunk) {
+        $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
+        if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
+        
         $api_key = '';
         switch($ai_service) {
             case 'google': $api_key = $this->settings['google_api_key'] ?? ''; break;
@@ -95,25 +127,27 @@ class AIVoice_Public {
         if (empty($api_key)) return new WP_Error('no_api_key', 'API key for ' . ucfirst($ai_service) . ' is not configured.');
         
         $response_body = null;
-        $args = ['timeout' => 30];
+        $args = ['timeout' => 25];
 
-        if ($ai_service === 'google') {
-            // Google Cloud TTS Logic (unchanged)
-        } else if ($ai_service === 'gemini') {
+        if ($ai_service === 'gemini') {
             $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
             if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
             
+            $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
+            if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
+
             $tone_prompt = '';
             switch ($gemini_tone) {
-                case 'newscaster': $tone_prompt = 'Read the following in a professional, formal, newscaster style: '; break;
-                case 'conversational': $tone_prompt = 'Read the following in a casual, conversational tone: '; break;
-                case 'calm': $tone_prompt = 'Read the following in a calm and soothing voice: '; break;
+                case 'newscaster': $tone_prompt = 'Say in a professional, newscaster voice: '; break;
+                case 'conversational': $tone_prompt = 'Say in a casual, conversational tone: '; break;
+                case 'calm': $tone_prompt = 'Say in a calm and soothing voice: '; break;
             }
+            $final_text = $tone_prompt . $text_chunk;
 
-            $final_text = $tone_prompt . substr($text_to_speak, 0, 4900);
-
+            // --- THE FIX IS HERE: Correct Model Name and API Endpoint ---
             $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' . $api_key;
             $body = [
+                'model' => 'gemini-2.5-flash-preview-tts',
                 'contents' => [['parts' => [['text' => $final_text]]]],
                 'generationConfig' => [
                     'responseModalities' => ["AUDIO"],
@@ -124,36 +158,24 @@ class AIVoice_Public {
             $args['headers'] = ['Content-Type' => 'application/json'];
             $response = wp_remote_post($api_url, $args);
 
-            if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Gemini API Error: ' . $response->get_error_message());
+            if (is_wp_error($response)) return $response;
             
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
             
-            // --- BUG FIX IS HERE ---
             if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
-                $error_message = $response_data['error']['message'] ?? 'Unknown error. The API response structure might have changed or your API key may be invalid.';
+                $error_message = $response_data['error']['message'] ?? 'Unknown error during chunk generation. Please verify your Google Cloud Project has billing enabled and the Generative Language API is active.';
                 return new WP_Error('gemini_api_error', 'Gemini API Error: ' . $error_message);
             }
             $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
-            
-        } else { // OpenAI
-            // OpenAI Logic (unchanged)
         }
+        // ... (add similar logic for 'google' and 'openai' if needed)
 
-        if (empty($response_body)) return new WP_Error('api_empty_response', 'API returned empty audio.');
+        if (empty($response_body)) return new WP_Error('api_empty_chunk_response', 'API returned empty audio for a chunk.');
 
-        $upload = wp_upload_bits('ai-voice-' . $post_id . '-' . time() . '.mp3', null, $response_body);
-        if (!empty($upload['error'])) return new WP_Error('upload_error', 'WordPress upload error: ' . $upload['error']);
+        $temp_file = wp_tempnam('ai-voice-chunk-');
+        file_put_contents($temp_file, $response_body);
         
-        $attachment = ['guid' => $upload['url'], 'post_mime_type' => 'audio/mpeg', 'post_title' => 'AI Voice for ' . get_the_title($post_id), 'post_content' => '', 'post_status' => 'inherit'];
-        $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
-        require_once(ABSPATH . 'wp-admin/includes/media.php');
-        require_once(ABSPATH . 'wp-admin/includes/image.php');
-        $attach_data = wp_generate_attachment_metadata($attach_id, $upload['file']);
-        wp_update_attachment_metadata($attach_id, $attach_data);
-
-        update_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, $upload['url']);
-
-        return $upload['url'];
+        return $temp_file;
     }
 
     private function prepare_frontend_scripts($post_id) {
@@ -176,4 +198,3 @@ class AIVoice_Public {
         ]);
     }
 }
-

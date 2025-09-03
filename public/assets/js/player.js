@@ -110,15 +110,17 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    jQuery.post(
-      aiVoiceData.ajax_url,
-      {
+    jQuery.ajax({
+      url: aiVoiceData.ajax_url,
+      type: "POST",
+      data: {
         action: "ai_voice_generate_audio",
         nonce: aiVoiceData.nonce,
         post_id: aiVoiceData.post_id,
         text_to_speak: textToSpeak,
       },
-      function (response) {
+      timeout: 120000, // Increase timeout to 120 seconds (2 minutes) for chunk processing
+      success: function (response) {
         isGenerating = false;
         playPauseBtn.disabled = false;
         loader.style.display = "none";
@@ -131,8 +133,16 @@ document.addEventListener("DOMContentLoaded", () => {
           console.error("AI Voice Error:", response.data.message);
           playIcon.style.display = "block";
         }
-      }
-    );
+      },
+      error: function (jqXHR, textStatus, errorThrown) {
+        isGenerating = false;
+        playPauseBtn.disabled = false;
+        loader.style.display = "none";
+        articleTitleEl.textContent = "Error: Request timed out.";
+        console.error("AI Voice AJAX Error:", textStatus, errorThrown);
+        playIcon.style.display = "block";
+      },
+    });
   };
 
   const updateTheme = (theme) => {
