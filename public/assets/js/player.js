@@ -119,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
         post_id: aiVoiceData.post_id,
         text_to_speak: textToSpeak,
       },
-      timeout: 120000, // Increase timeout to 120 seconds (2 minutes) for chunk processing
+      timeout: 120000,
       success: function (response) {
         isGenerating = false;
         playPauseBtn.disabled = false;
@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
         isGenerating = false;
         playPauseBtn.disabled = false;
         loader.style.display = "none";
-        articleTitleEl.textContent = "Error: Request timed out.";
+        articleTitleEl.textContent = "Error: Request failed.";
         console.error("AI Voice AJAX Error:", textStatus, errorThrown);
         playIcon.style.display = "block";
       },
@@ -161,12 +161,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const updateAILogo = () => {
     const service = aiVoiceData.aiService || "google";
     if (service === "google") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.t2 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"></path></svg><span>Voiced by Google Cloud</span>`;
+      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"></path></svg><span>Voiced by Google Cloud</span>`;
     } else if (service === "gemini") {
       aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.5a9.5 9.5 0 1 0 9.5 9.5A9.5 9.5 0 0 0 12 2.5ZM12 23a11 11 0 1 1 11-11 11 11 0 0 1-11 11Z"/><path d="M12 5.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 12 5.5Zm0 11a4.5 4.5 0 1 1 4.5-4.5 4.5 4.5 0 0 1-4.5 4.5Z"/></svg><span>Voiced by Gemini</span>`;
-    } else {
-      // This will now correctly be 'openai'
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 41 41" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M35.65,10.96a16.5,16.5,0,0,0-23.33,0L5,18.29l7.33-7.33a16.5,16.5,0,0,0,23.33,0l4.95,4.95-4.95-4.95ZM12.33,29.32,5,22,18.29,35.31a16.48,16.48,0,0,0,11-4.8L22,22Z" ></path></svg><span>Voiced by OpenAI</span>`;
+    } else if (service === "openai") {
+      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M22.281 9.821c0.076-0.245 0.116-0.502 0.116-0.768c0-1.454-1.178-2.632-2.632-2.632c-0.389 0-0.759 0.085-1.092 0.237c-0.708-1.049-1.907-1.737-3.285-1.737c-1.377 0-2.576 0.688-3.285 1.737c-0.333-0.152-0.703-0.237-1.092-0.237c-1.454 0-2.632 1.178-2.632 2.632c0 0.266 0.040 0.523 0.116 0.768c-1.092 0.652-1.826 1.844-1.826 3.221c0 1.377 0.734 2.569 1.826 3.221c-0.076 0.245-0.116 0.502-0.116 0.768c0 1.454 1.178 2.632 2.632 2.632c0.389 0 0.759-0.085 1.092-0.237c0.708 1.049 1.907 1.737 3.285 1.737c1.377 0 2.576-0.688 3.285-1.737c0.333 0.152 0.703 0.237 1.092 0.237c1.454 0 2.632-1.178 2.632-2.632c0-0.266-0.040-0.523-0.116-0.768c1.092-0.652 1.826-1.844 1.826-3.221c0-1.377-0.734-2.569-1.826-3.221z"></path></svg><span>Voiced by OpenAI</span>`;
     }
   };
 
@@ -182,7 +181,6 @@ document.addEventListener("DOMContentLoaded", () => {
         audio.playbackRate = currentSpeed;
         speedBtn.textContent = `${s}x`;
         speedModal.style.display = "none";
-        // Reactivate buttons in the modal
         speedContainer
           .querySelectorAll("button")
           .forEach((b) => b.classList.remove("active"));
@@ -198,11 +196,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentVoices = voices[aiVoiceData.aiService] || voices.google;
     currentVoices.forEach((voice, index) => {
       const btn = document.createElement("button");
-      // In a real scenario, you'd fetch and compare the current voice ID
       btn.className = index === 0 ? "active" : "";
       btn.textContent = voice.name;
-      // Note: Voice changing on the fly is a premium feature that would require
-      // regenerating audio. This UI is for demonstration.
       voiceContainer.appendChild(btn);
     });
   };

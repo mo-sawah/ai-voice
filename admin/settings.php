@@ -81,7 +81,7 @@ class AIVoice_Settings {
                                 </select>
                             </td>
                         </tr>
-                        <tr class="ai-voice-setting-row" data-service="gemini">
+                        <tr class="ai-voice-setting-row" data-service="gemini" style="display:none;">
                             <th scope="row"><label for="ai_voice_settings[gemini_tone]">Default Gemini Tone</label></th>
                             <td>
                                 <select name="ai_voice_settings[gemini_tone]">
@@ -93,42 +93,42 @@ class AIVoice_Settings {
                                 <p class="description">Select the default speaking style for Gemini voices.</p>
                             </td>
                         </tr>
-                        <tr class="ai-voice-setting-row" data-service="google">
+                        <tr class="ai-voice-setting-row" data-service="google" style="display:none;">
                             <th scope="row"><label for="ai_voice_settings[google_voice]">Default Google Voice</label></th>
                             <td>
                                 <select name="ai_voice_settings[google_voice]">
                                     <optgroup label="English (US) - Studio">
-                                        <option value="en-US-Studio-M" <?php selected($options['google_voice'] ?? '', 'en-US-Studio-M'); ?>>Male</option>
-                                        <option value="en-US-Studio-O" <?php selected($options['google_voice'] ?? '', 'en-US-Studio-O'); ?>>Female</option>
+                                        <option value="en-US-Studio-M" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Studio-M'); ?>>Male</option>
+                                        <option value="en-US-Studio-O" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Studio-O'); ?>>Female</option>
                                     </optgroup>
                                     <optgroup label="English (US) - Neural2">
-                                        <option value="en-US-Neural2-J" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-J'); ?>>Male 1</option>
-                                        <option value="en-US-Neural2-A" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-A'); ?>>Male 2</option>
-                                        <option value="en-US-Neural2-I" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-I'); ?>>Female 1</option>
-                                        <option value="en-US-Neural2-C" <?php selected($options['google_voice'] ?? '', 'en-US-Neural2-C'); ?>>Female 2</option>
+                                        <option value="en-US-Neural2-J" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Neural2-J'); ?>>Male 1</option>
+                                        <option value="en-US-Neural2-A" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Neural2-A'); ?>>Male 2</option>
+                                        <option value="en-US-Neural2-I" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Neural2-I'); ?>>Female 1</option>
+                                        <option value="en-US-Neural2-C" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Neural2-C'); ?>>Female 2</option>
                                     </optgroup>
                                     <optgroup label="English (US) - WaveNet">
-                                        <option value="en-US-Wavenet-D" <?php selected($options['google_voice'] ?? 'en-US-Wavenet-D', 'en-US-Wavenet-D'); ?>>Male 1</option>
-                                        <option value="en-US-Wavenet-B" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-B'); ?>>Male 2</option>
-                                        <option value="en-US-Wavenet-F" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-F'); ?>>Female 1</option>
-                                        <option value="en-US-Wavenet-C" <?php selected($options['google_voice'] ?? '', 'en-US-Wavenet-C'); ?>>Female 2</option>
+                                        <option value="en-US-Wavenet-D" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Wavenet-D'); ?>>Male 1</option>
+                                        <option value="en-US-Wavenet-B" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Wavenet-B'); ?>>Male 2</option>
+                                        <option value="en-US-Wavenet-F" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Wavenet-F'); ?>>Female 1</option>
+                                        <option value="en-US-Wavenet-C" <?php selected($options['google_voice'] ?? 'en-US-Studio-O', 'en-US-Wavenet-C'); ?>>Female 2</option>
                                     </optgroup>
                                 </select>
                             </td>
                         </tr>
-                         <tr class="ai-voice-setting-row" data-service="gemini">
+                         <tr class="ai-voice-setting-row" data-service="gemini" style="display:none;">
                             <th scope="row"><label for="ai_voice_settings[gemini_voice]">Default Gemini Voice</label></th>
                             <td>
                                 <select name="ai_voice_settings[gemini_voice]">
-                                     <option value="Kore" <?php selected( $options['gemini_voice'] ?? 'Kore', 'Kore' ); ?>>Kore (Firm)</option>
-                                     <option value="Puck" <?php selected( $options['gemini_voice'] ?? 'Kore', 'Puck' ); ?>>Puck (Upbeat)</option>
-                                     <option value="Charon" <?php selected( $options['gemini_voice'] ?? 'Kore', 'Charon' ); ?>>Charon (Informative)</option>
-                                     <option value="Leda" <?php selected( $options['gemini_voice'] ?? 'Kore', 'Leda' ); ?>>Leda (Youthful)</option>
-                                     <option value="Enceladus" <?php selected( $options['gemini_voice'] ?? 'Kore', 'Enceladus' ); ?>>Enceladus (Breathy)</option>
+                                     <option value="Kore" <?php selected( $options['gemini_voice'] ?? 'Puck', 'Kore' ); ?>>Kore (Firm)</option>
+                                     <option value="Puck" <?php selected( $options['gemini_voice'] ?? 'Puck', 'Puck' ); ?>>Puck (Upbeat)</option>
+                                     <option value="Charon" <?php selected( $options['gemini_voice'] ?? 'Puck', 'Charon' ); ?>>Charon (Informative)</option>
+                                     <option value="Leda" <?php selected( $options['gemini_voice'] ?? 'Puck', 'Leda' ); ?>>Leda (Youthful)</option>
+                                     <option value="Enceladus" <?php selected( $options['gemini_voice'] ?? 'Puck', 'Enceladus' ); ?>>Enceladus (Breathy)</option>
                                 </select>
                             </td>
                         </tr>
-                         <tr class="ai-voice-setting-row" data-service="openai">
+                         <tr class="ai-voice-setting-row" data-service="openai" style="display:none;">
                             <th scope="row"><label for="ai_voice_settings[openai_voice]">Default OpenAI Voice</label></th>
                             <td>
                                 <select name="ai_voice_settings[openai_voice]">
@@ -181,4 +181,3 @@ class AIVoice_Settings {
         <?php
     }
 }
-
