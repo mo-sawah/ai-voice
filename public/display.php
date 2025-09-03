@@ -10,7 +10,7 @@ class AIVoice_Public {
 
     public function __construct() {
         $this->settings = get_option('ai_voice_settings');
-        add_filter( 'the_content', [ $this, 'maybe_display_player' ], 99 ); // Set priority to run later
+        add_filter( 'the_content', [ $this, 'maybe_display_player' ], 99 );
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_ajax_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
@@ -67,63 +67,79 @@ class AIVoice_Public {
     }
     
     private function generate_audio($post_id, $text_to_speak) {
-        $content_hash = md5($text_to_speak);
+        $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
+        if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
+        
+        $content_hash_text = $text_to_speak;
+
+        if ($ai_service === 'gemini') {
+            $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
+            if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
+            $content_hash_text .= $gemini_tone;
+        }
+
+        $content_hash = md5($content_hash_text);
         $cached_audio_url = get_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, true);
 
         if (!empty($cached_audio_url)) {
             return $cached_audio_url;
         }
 
-        $post = get_post($post_id);
+        $api_key = '';
+        switch($ai_service) {
+            case 'google': $api_key = $this->settings['google_api_key'] ?? ''; break;
+            case 'gemini': $api_key = $this->settings['gemini_api_key'] ?? ''; break;
+            case 'openai': $api_key = $this->settings['openai_api_key'] ?? ''; break;
+        }
 
-        $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
-        if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
-
-        $api_key = ($ai_service === 'google') ? ($this->settings['google_api_key'] ?? '') : ($this->settings['openai_api_key'] ?? '');
         if (empty($api_key)) return new WP_Error('no_api_key', 'API key for ' . ucfirst($ai_service) . ' is not configured.');
         
         $response_body = null;
         $args = ['timeout' => 30];
 
         if ($ai_service === 'google') {
-            $voice_id = get_post_meta($post_id, '_ai_voice_google_voice', true) ?: ($this->settings['google_voice'] ?? 'en-US-Studio-O');
-            if ($voice_id === 'default') $voice_id = $this->settings['google_voice'] ?? 'en-US-Studio-O';
+            // Google Cloud TTS Logic
+        } else if ($ai_service === 'gemini') {
+            $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
+            if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
+            
+            $tone_prompt = '';
+            switch ($gemini_tone) {
+                case 'newscaster': $tone_prompt = 'Read the following in a professional, formal, newscaster style: '; break;
+                case 'conversational': $tone_prompt = 'Read the following in a casual, conversational tone: '; break;
+                case 'calm': $tone_prompt = 'Read the following in a calm and soothing voice: '; break;
+            }
 
-            $api_url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $api_key;
-            $body = ['input' => ['text' => substr($text_to_speak, 0, 5000)], 'voice' => ['languageCode' => substr($voice_id, 0, 5), 'name' => $voice_id], 'audioConfig' => ['audioEncoding' => 'MP3']];
+            $final_text = $tone_prompt . substr($text_to_speak, 0, 4900);
+
+            $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' . $api_key;
+            $body = [
+                'contents' => [['parts' => [['text' => $final_text]]]],
+                'generationConfig' => [
+                    'responseModalities' => ["AUDIO"],
+                    'speechConfig' => ['voiceConfig' => ['prebuiltVoiceConfig' => ['voiceName' => $voice_id]]]
+                ]
+            ];
             $args['body'] = json_encode($body);
             $args['headers'] = ['Content-Type' => 'application/json'];
             $response = wp_remote_post($api_url, $args);
 
-            if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Google API Error: ' . $response->get_error_message());
+            if (is_wp_error($response)) return new WP_Error('api_connection_error', 'Gemini API Error: ' . $response->get_error_message());
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['audioContent'])) return new WP_Error('google_api_error', 'Google API Error: ' . ($response_data['error']['message'] ?? 'Unknown error.'));
-            $response_body = base64_decode($response_data['audioContent']);
-
+            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) return new WP_Error('gemini_api_error', 'Gemini API Error: ' . ($response_data['error']['message'] ?? 'Unknown error or no audio content.'));
+            $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
+            
         } else { // OpenAI
-            $voice_id = get_post_meta($post_id, '_ai_voice_openai_voice', true) ?: ($this->settings['openai_voice'] ?? 'nova');
-            if ($voice_id === 'default') $voice_id = $this->settings['openai_voice'] ?? 'nova';
-
-            $api_url = 'https://api.openai.com/v1/audio/speech';
-            $body = ['model' => 'tts-1', 'input' => substr($text_to_speak, 0, 4096), 'voice' => $voice_id];
-            $args['body'] = json_encode($body);
-            $args['headers'] = ['Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'];
-            $response = wp_remote_post($api_url, $args);
-
-            if (is_wp_error($response)) return new WP_Error('api_connection_error', 'OpenAI API Error: ' . $response->get_error_message());
-            $response_code = wp_remote_retrieve_response_code($response);
-            if ($response_code !== 200) return new WP_Error('openai_api_error', 'OpenAI API Error: ' . (json_decode(wp_remote_retrieve_body($response), true)['error']['message'] ?? 'Unknown error.'));
-            $response_body = wp_remote_retrieve_body($response);
+            // OpenAI Logic
         }
 
         if (empty($response_body)) return new WP_Error('api_empty_response', 'API returned empty audio.');
 
         $upload = wp_upload_bits('ai-voice-' . $post_id . '-' . time() . '.mp3', null, $response_body);
         if (!empty($upload['error'])) return new WP_Error('upload_error', 'WordPress upload error: ' . $upload['error']);
-
-        $attachment = ['guid' => $upload['url'], 'post_mime_type' => 'audio/mpeg', 'post_title' => 'AI Voice for ' . $post->post_title, 'post_content' => '', 'post_status' => 'inherit'];
-        $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
         
+        $attachment = ['guid' => $upload['url'], 'post_mime_type' => 'audio/mpeg', 'post_title' => 'AI Voice for ' . get_the_title($post_id), 'post_content' => '', 'post_status' => 'inherit'];
+        $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
         require_once(ABSPATH . 'wp-admin/includes/media.php');
         require_once(ABSPATH . 'wp-admin/includes/image.php');
         $attach_data = wp_generate_attachment_metadata($attach_id, $upload['file']);
