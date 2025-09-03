@@ -26,8 +26,8 @@
 #ai-voice-player-wrapper {
   font-family: "Inter", sans-serif;
   margin-bottom: 1.5rem;
-  position: relative; /* Add position */
-  z-index: 1000; /* Add a high z-index */
+  position: relative;
+  z-index: 1000;
 }
 
 #ai-voice-player-wrapper .ai-voice-player-container {
@@ -104,7 +104,7 @@
 #ai-voice-player-wrapper .info-progress-container {
   flex-grow: 1;
   overflow: hidden;
-  min-width: 0; /* THE FIX: Allows this flex item to shrink and prevents overflow */
+  min-width: 0;
 }
 #ai-voice-player-wrapper .title-logo-flex {
   display: flex;
@@ -147,6 +147,9 @@
   color: var(--text-secondary-light);
   flex-shrink: 0;
 }
+#ai-voice-player-wrapper .total-time-display {
+  margin-right: 0.5rem;
+}
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
   .time-display {
@@ -161,13 +164,13 @@
   align-items: center;
 }
 
-/* --- Custom Progress Bar (User-Improved Cross-Browser Solution) --- */
+/* --- Custom Progress Bar (Cross-Browser) --- */
 #ai-voice-player-wrapper input[type="range"].progress-bar {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 6px;
-  background: var(--bg-secondary-light); /* Uses theme color */
+  background: var(--bg-secondary-light);
   outline: none;
   border-radius: 3px;
   cursor: pointer;
@@ -179,7 +182,7 @@
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
   input[type="range"].progress-bar {
-  background: var(--bg-secondary-dark); /* Uses theme color */
+  background: var(--bg-secondary-dark);
 }
 
 /* Webkit (Chrome, Safari, Edge) */
@@ -189,11 +192,11 @@
   appearance: none;
   width: 16px;
   height: 16px;
-  background: var(--accent-light); /* Uses theme color */
+  background: var(--accent-light);
   border-radius: 50%;
-  border: 2px solid var(--bg-light); /* Uses theme color */
+  border: 2px solid var(--bg-light);
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-  margin-top: -5px; /* Fine-tuned alignment */
+  margin-top: -5px;
   transition: transform 0.2s ease;
 }
 #ai-voice-player-wrapper
@@ -207,9 +210,9 @@
 #ai-voice-player-wrapper input[type="range"].progress-bar::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: var(--accent-light); /* Uses theme color */
+  background: var(--accent-light);
   border-radius: 50%;
-  border: 2px solid var(--bg-light); /* Uses theme color */
+  border: 2px solid var(--bg-light);
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
   cursor: pointer;
 }
@@ -231,8 +234,8 @@
   align-items: center;
   gap: 0.25rem;
   border-left: 1px solid var(--border-light);
-  padding-left: 1rem;
-  flex-shrink: 0; /* Add this to prevent this container from shrinking */
+  padding-left: 0.5rem;
+  flex-shrink: 0;
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
@@ -250,7 +253,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
-  box-shadow: none !important; /* FIX: Override theme shadow */
+  box-shadow: none !important;
 }
 #ai-voice-player-wrapper .control-button svg {
   display: block;
@@ -276,7 +279,7 @@
   position: fixed;
   inset: 0;
   z-index: 10000;
-  display: none; /* Hidden by default */
+  display: none;
   align-items: center;
   justify-content: center;
   padding: 1rem;
