@@ -130,44 +130,125 @@ class AIVoice_Public {
         $args = ['timeout' => 25];
 
         if ($ai_service === 'gemini') {
-            $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
-            if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
-            
-            $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
-            if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
+    $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Puck');
+    if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Puck';
+    
+    $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
+    if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
 
-            $tone_prompt = '';
-            switch ($gemini_tone) {
-                case 'newscaster': $tone_prompt = 'Say in a professional, newscaster voice: '; break;
-                case 'conversational': $tone_prompt = 'Say in a casual, conversational tone: '; break;
-                case 'calm': $tone_prompt = 'Say in a calm and soothing voice: '; break;
-            }
-            $final_text = $tone_prompt . $text_chunk;
+    $tone_prompt = '';
+    switch ($gemini_tone) {
+        case 'newscaster': $tone_prompt = 'Say in a professional, newscaster voice: '; break;
+        case 'conversational': $tone_prompt = 'Say in a casual, conversational tone: '; break;
+        case 'calm': $tone_prompt = 'Say in a calm and soothing voice: '; break;
+        default: $tone_prompt = ''; break; // neutral doesn't need a prompt
+    }
+    $final_text = $tone_prompt . $text_chunk;
 
-            // --- THE FIX IS HERE: Correct Model Name and API Endpoint ---
-            $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=' . $api_key;
-            $body = [
-                'model' => 'gemini-2.5-flash-preview-tts',
-                'contents' => [['parts' => [['text' => $final_text]]]],
-                'generationConfig' => [
-                    'responseModalities' => ["AUDIO"],
-                    'speechConfig' => ['voiceConfig' => ['prebuiltVoiceConfig' => ['voiceName' => $voice_id]]]
+    // CORRECTED: Use the proper Gemini API endpoint for text-to-speech
+    $api_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=' . $api_key;
+    
+    $body = [
+        'contents' => [
+            [
+                'parts' => [
+                    ['text' => $final_text]
                 ]
-            ];
-            $args['body'] = json_encode($body);
-            $args['headers'] = ['Content-Type' => 'application/json'];
-            $response = wp_remote_post($api_url, $args);
+            ]
+        ],
+        'generationConfig' => [
+            'responseModalities' => ['AUDIO'],
+            'speechConfig' => [
+                'voiceConfig' => [
+                    'prebuiltVoiceConfig' => [
+                        'voiceName' => $voice_id
+                    ]
+                ]
+            ]
+        ]
+    ];
 
-            if (is_wp_error($response)) return $response;
-            
-            $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            
-            if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
-                $error_message = $response_data['error']['message'] ?? 'Unknown error during chunk generation. Please verify your Google Cloud Project has billing enabled and the Generative Language API is active.';
-                return new WP_Error('gemini_api_error', 'Gemini API Error: ' . $error_message);
+    $args['body'] = json_encode($body);
+    $args['headers'] = [
+        'Content-Type' => 'application/json'
+    ];
+    
+    $response = wp_remote_post($api_url, $args);
+
+    if (is_wp_error($response)) {
+        return new WP_Error('gemini_request_failed', 'Failed to connect to Gemini API: ' . $response->get_error_message());
+    }
+    
+    $response_code = wp_remote_retrieve_response_code($response);
+    $response_body_raw = wp_remote_retrieve_body($response);
+    $response_data = json_decode($response_body_raw, true);
+    
+    // Enhanced error handling
+    if ($response_code !== 200) {
+        $error_message = 'HTTP ' . $response_code . ': ';
+        
+        if (isset($response_data['error'])) {
+            if (isset($response_data['error']['message'])) {
+                $error_message .= $response_data['error']['message'];
+            } else {
+                $error_message .= 'Unknown API error';
             }
-            $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
+            
+            // Add specific guidance for common errors
+            if (isset($response_data['error']['code'])) {
+                switch ($response_data['error']['code']) {
+                    case 403:
+                        $error_message .= ' (Check if your API key has Gemini API access enabled)';
+                        break;
+                    case 400:
+                        $error_message .= ' (Invalid request format or parameters)';
+                        break;
+                    case 429:
+                        $error_message .= ' (Rate limit exceeded - try again later)';
+                        break;
+                }
+            }
+        } else {
+            $error_message .= 'Unknown error occurred';
         }
+        
+        return new WP_Error('gemini_api_error', $error_message);
+    }
+    
+    // Check if we have the expected response structure
+    if (!isset($response_data['candidates']) || 
+        !is_array($response_data['candidates']) || 
+        empty($response_data['candidates'])) {
+        return new WP_Error('gemini_invalid_response', 'No audio candidates returned from Gemini API');
+    }
+    
+    $candidate = $response_data['candidates'][0];
+    
+    if (!isset($candidate['content']['parts']) || 
+        !is_array($candidate['content']['parts']) || 
+        empty($candidate['content']['parts'])) {
+        return new WP_Error('gemini_invalid_response', 'No content parts in Gemini response');
+    }
+    
+    // Look for the audio data in the response parts
+    $audio_data = null;
+    foreach ($candidate['content']['parts'] as $part) {
+        if (isset($part['inlineData']['data'])) {
+            $audio_data = $part['inlineData']['data'];
+            break;
+        }
+    }
+    
+    if (empty($audio_data)) {
+        return new WP_Error('gemini_no_audio', 'No audio data found in Gemini API response');
+    }
+    
+    $response_body = base64_decode($audio_data);
+    
+    if ($response_body === false || empty($response_body)) {
+        return new WP_Error('gemini_decode_failed', 'Failed to decode audio data from Gemini API');
+    }
+}
         // ... (add similar logic for 'google' and 'openai' if needed)
 
         if (empty($response_body)) return new WP_Error('api_empty_chunk_response', 'API returned empty audio for a chunk.');
