@@ -1,257 +1,330 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const wrapper = document.getElementById("ai-voice-player-wrapper");
-  if (!wrapper || typeof aiVoiceData === "undefined") return;
+document.addEventListener("DOMContentLoaded", function () {
+  const player = document.getElementById("ai-voice-player");
+  if (!player || typeof aiVoiceData === "undefined") return;
 
-  // --- DOM ELEMENTS ---
-  const playerContainer = wrapper.querySelector(".ai-voice-player-container");
-  const playPauseBtn = wrapper.querySelector("#ai-voice-play-pause-btn");
-  const playIcon = wrapper.querySelector("#ai-voice-play-icon");
-  const pauseIcon = wrapper.querySelector("#ai-voice-pause-icon");
-  const loader = wrapper.querySelector("#ai-voice-loader");
-  const progressBar = wrapper.querySelector("#ai-voice-progress-bar");
-  const currentTimeEl = wrapper.querySelector("#ai-voice-current-time");
-  const totalTimeEl = wrapper.querySelector("#ai-voice-total-time");
-  const themeToggle = wrapper.querySelector("#ai-voice-theme-toggle");
-  const sunIcon = wrapper.querySelector("#ai-voice-sun-icon");
-  const moonIcon = wrapper.querySelector("#ai-voice-moon-icon");
-  const speedBtn = wrapper.querySelector("#ai-voice-speed-btn");
-  const voiceBtn = wrapper.querySelector("#ai-voice-voice-btn");
-  const aiLogoContainer = wrapper.querySelector("#ai-voice-logo-container");
-  const articleTitleEl = wrapper.querySelector("#ai-voice-article-title");
-  const speedModal = wrapper.querySelector("#ai-voice-speed-modal");
-  const voiceModal = wrapper.querySelector("#ai-voice-voice-modal");
+  const playBtn = document.getElementById("ai-voice-play-btn");
+  const playIcon = playBtn.querySelector(".play-icon");
+  const pauseIcon = playBtn.querySelector(".pause-icon");
+  const loader = playBtn.querySelector(".loader");
+  const progressBar = player.querySelector(".progress-bar");
+  const currentTimeEl = player.querySelector(".current-time");
+  const totalTimeEl = player.querySelector(".total-time");
+  const speedBtn = player.querySelector(".speed-btn");
 
-  // --- AUDIO & STATE ---
-  const audio = new Audio();
+  let audio = null;
   let isGenerating = false;
-  let currentTheme = aiVoiceData.theme || "light";
   let currentSpeed = 1.0;
-  const voices = {
-    google: [
-      { id: "en-US-Studio-O", name: "Studio (Female)" },
-      { id: "en-US-Neural2-J", name: "Neural (Male)" },
-      { id: "en-US-Wavenet-F", name: "WaveNet (Female)" },
-    ],
-    gemini: [
-      { id: "Kore", name: "Kore (Firm)" },
-      { id: "Puck", name: "Puck (Upbeat)" },
-      { id: "Charon", name: "Charon (Informative)" },
-      { id: "Leda", name: "Leda (Youthful)" },
-      { id: "Enceladus", name: "Enceladus (Breathy)" },
-    ],
-    openai: [
-      { id: "alloy", name: "Alloy" },
-      { id: "echo", name: "Echo" },
-      { id: "fable", name: "Fable" },
-      { id: "onyx", name: "Onyx" },
-      { id: "nova", name: "Nova" },
-      { id: "shimmer", name: "Shimmer" },
-    ],
-  };
+  const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
 
-  // --- FUNCTIONS ---
-  const formatTime = (seconds) => {
+  // Format time helper
+  function formatTime(seconds) {
     if (isNaN(seconds) || seconds < 0) return "0:00";
-    const minutes = Math.floor(seconds / 60);
+    const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
-    return `${minutes}:${secs.toString().padStart(2, "0")}`;
-  };
+    return mins + ":" + (secs < 10 ? "0" : "") + secs;
+  }
 
-  const updateProgressBarUI = () => {
-    const percentage = audio.duration
-      ? (audio.currentTime / audio.duration) * 100
-      : 0;
-    const accentColor =
-      currentTheme === "light" ? "var(--accent-light)" : "var(--accent-dark)";
-    const bgColor =
-      currentTheme === "light"
-        ? "var(--bg-secondary-light)"
-        : "var(--bg-secondary-dark)";
-    progressBar.style.background = `linear-gradient(to right, ${accentColor} ${percentage}%, ${bgColor} ${percentage}%)`;
-  };
+  // Update progress bar background
+  function updateProgressBar() {
+    if (!audio || !audio.duration) return;
 
-  const togglePlayPause = () => {
+    const percentage = (audio.currentTime / audio.duration) * 100;
+    const primaryColor = getComputedStyle(player)
+      .getPropertyValue("--primary-color")
+      .trim();
+    const secondaryBg = getComputedStyle(player)
+      .getPropertyValue("--secondary-bg")
+      .trim();
+
+    progressBar.style.background = `linear-gradient(to right, ${primaryColor} ${percentage}%, ${secondaryBg} ${percentage}%)`;
+  }
+
+  // Play/pause toggle
+  playBtn.addEventListener("click", function () {
     if (isGenerating) return;
-    if (!audio.src) {
+
+    if (!audio) {
       generateAudio();
-      return;
+    } else if (audio.paused) {
+      audio.play();
+    } else {
+      audio.pause();
     }
-    audio.paused ? audio.play() : audio.pause();
-  };
+  });
 
-  const getVisibleText = () => {
-    let contentNode = wrapper.closest("article, .post, .entry-content, main");
-    if (!contentNode) {
-      contentNode = wrapper.parentElement;
-    }
-    const clone = contentNode.cloneNode(true);
-    const playerClone = clone.querySelector("#ai-voice-player-wrapper");
-    if (playerClone) playerClone.remove();
-    clone
-      .querySelectorAll('script, style, noscript, .ads, [aria-hidden="true"]')
-      .forEach((el) => el.remove());
-    return clone.textContent.replace(/\s+/g, " ").trim();
-  };
-
-  const generateAudio = () => {
+  // Generate audio via AJAX
+  function generateAudio() {
     isGenerating = true;
-    playPauseBtn.disabled = true;
+    playBtn.disabled = true;
     playIcon.style.display = "none";
+    pauseIcon.style.display = "none";
     loader.style.display = "block";
 
-    const textToSpeak = getVisibleText();
+    // Use jQuery if available, otherwise use fetch
+    if (typeof jQuery !== "undefined") {
+      jQuery.ajax({
+        url: aiVoiceData.ajax_url,
+        type: "POST",
+        data: {
+          action: "ai_voice_generate",
+          nonce: aiVoiceData.nonce,
+          post_id: aiVoiceData.post_id,
+        },
+        timeout: 60000,
+        success: function (response) {
+          isGenerating = false;
+          playBtn.disabled = false;
+          loader.style.display = "none";
 
-    if (!textToSpeak) {
-      isGenerating = false;
-      playPauseBtn.disabled = false;
-      loader.style.display = "none";
-      articleTitleEl.textContent = "No text found on page.";
-      playIcon.style.display = "block";
-      return;
-    }
-
-    jQuery.ajax({
-      url: aiVoiceData.ajax_url,
-      type: "POST",
-      data: {
-        action: "ai_voice_generate_audio",
-        nonce: aiVoiceData.nonce,
-        post_id: aiVoiceData.post_id,
-        text_to_speak: textToSpeak,
-      },
-      timeout: 120000,
-      success: function (response) {
-        isGenerating = false;
-        playPauseBtn.disabled = false;
-        loader.style.display = "none";
-        if (response.success) {
-          audio.src = response.data.audioUrl;
-          audio.play();
-        } else {
-          articleTitleEl.textContent =
-            "Error: " + (response.data.message || "Generation failed.");
-          console.error("AI Voice Error:", response.data.message);
+          if (response.success && response.data.audio_url) {
+            createAudioPlayer(response.data.audio_url);
+          } else {
+            showError(response.data || "Audio generation failed");
+            playIcon.style.display = "block";
+          }
+        },
+        error: function (xhr, status, error) {
+          isGenerating = false;
+          playBtn.disabled = false;
+          loader.style.display = "none";
+          console.error("AJAX Error:", status, error);
+          showError("Request failed. Please try again.");
           playIcon.style.display = "block";
-        }
-      },
-      error: function (jqXHR, textStatus, errorThrown) {
-        isGenerating = false;
-        playPauseBtn.disabled = false;
-        loader.style.display = "none";
-        articleTitleEl.textContent = "Error: Request failed.";
-        console.error("AI Voice AJAX Error:", textStatus, errorThrown);
-        playIcon.style.display = "block";
-      },
-    });
-  };
-
-  const updateTheme = (theme) => {
-    currentTheme = theme;
-    playerContainer.dataset.theme = theme;
-    if (theme === "dark") {
-      sunIcon.style.display = "none";
-      moonIcon.style.display = "block";
+        },
+      });
     } else {
-      moonIcon.style.display = "none";
-      sunIcon.style.display = "block";
-    }
-    updateProgressBarUI();
-  };
+      // Fallback to fetch API if jQuery not available
+      fetch(aiVoiceData.ajax_url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          action: "ai_voice_generate",
+          nonce: aiVoiceData.nonce,
+          post_id: aiVoiceData.post_id,
+        }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          isGenerating = false;
+          playBtn.disabled = false;
+          loader.style.display = "none";
 
-  const updateAILogo = () => {
-    const service = aiVoiceData.aiService || "google";
-    if (service === "google") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"></path></svg><span>Voiced by Google Cloud</span>`;
-    } else if (service === "gemini") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.5a9.5 9.5 0 1 0 9.5 9.5A9.5 9.5 0 0 0 12 2.5ZM12 23a11 11 0 1 1 11-11 11 11 0 0 1-11 11Z"/><path d="M12 5.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 12 5.5Zm0 11a4.5 4.5 0 1 1 4.5-4.5 4.5 4.5 0 0 1-4.5 4.5Z"/></svg><span>Voiced by Gemini</span>`;
-    } else if (service === "openai") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M22.281 9.821c0.076-0.245 0.116-0.502 0.116-0.768c0-1.454-1.178-2.632-2.632-2.632c-0.389 0-0.759 0.085-1.092 0.237c-0.708-1.049-1.907-1.737-3.285-1.737c-1.377 0-2.576 0.688-3.285 1.737c-0.333-0.152-0.703-0.237-1.092-0.237c-1.454 0-2.632 1.178-2.632 2.632c0 0.266 0.040 0.523 0.116 0.768c-1.092 0.652-1.826 1.844-1.826 3.221c0 1.377 0.734 2.569 1.826 3.221c-0.076 0.245-0.116 0.502-0.116 0.768c0 1.454 1.178 2.632 2.632 2.632c0.389 0 0.759-0.085 1.092-0.237c0.708 1.049 1.907 1.737 3.285 1.737c1.377 0 2.576-0.688 3.285-1.737c0.333 0.152 0.703 0.237 1.092 0.237c1.454 0 2.632-1.178 2.632-2.632c0-0.266-0.040-0.523-0.116-0.768c1.092-0.652 1.826-1.844 1.826-3.221c0-1.377-0.734-2.569-1.826-3.221z"></path></svg><span>Voiced by OpenAI</span>`;
+          if (data.success && data.data.audio_url) {
+            createAudioPlayer(data.data.audio_url);
+          } else {
+            showError(data.data || "Audio generation failed");
+            playIcon.style.display = "block";
+          }
+        })
+        .catch((error) => {
+          isGenerating = false;
+          playBtn.disabled = false;
+          loader.style.display = "none";
+          console.error("Fetch Error:", error);
+          showError("Request failed. Please try again.");
+          playIcon.style.display = "block";
+        });
     }
-  };
+  }
 
-  const setupSpeedModal = () => {
-    const speedContainer = speedModal.querySelector("#ai-voice-speed-options");
-    speedContainer.innerHTML = "";
-    [0.75, 1.0, 1.25, 1.5, 2.0].forEach((s) => {
-      const btn = document.createElement("button");
-      btn.className = s === currentSpeed ? "active" : "";
-      btn.textContent = `${s}x`;
-      btn.onclick = () => {
-        currentSpeed = s;
-        audio.playbackRate = currentSpeed;
-        speedBtn.textContent = `${s}x`;
-        speedModal.style.display = "none";
-        speedContainer
-          .querySelectorAll("button")
-          .forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-      };
-      speedContainer.appendChild(btn);
+  // Create audio player
+  function createAudioPlayer(audioUrl) {
+    audio = new Audio(audioUrl);
+    audio.playbackRate = currentSpeed;
+
+    // Audio event listeners
+    audio.addEventListener("loadedmetadata", function () {
+      totalTimeEl.textContent = formatTime(audio.duration);
+      progressBar.max = audio.duration;
     });
-  };
 
-  const setupVoiceModal = () => {
-    const voiceContainer = voiceModal.querySelector("#ai-voice-voice-options");
-    voiceContainer.innerHTML = "";
-    const currentVoices = voices[aiVoiceData.aiService] || voices.google;
-    currentVoices.forEach((voice, index) => {
-      const btn = document.createElement("button");
-      btn.className = index === 0 ? "active" : "";
-      btn.textContent = voice.name;
-      voiceContainer.appendChild(btn);
+    audio.addEventListener("timeupdate", function () {
+      currentTimeEl.textContent = formatTime(audio.currentTime);
+      progressBar.value = audio.currentTime;
+      updateProgressBar();
     });
-  };
 
-  // --- EVENT LISTENERS ---
-  playPauseBtn.addEventListener("click", togglePlayPause);
-  audio.addEventListener("play", () => {
-    playIcon.style.display = "none";
-    pauseIcon.style.display = "block";
-  });
-  audio.addEventListener("pause", () => {
-    pauseIcon.style.display = "none";
-    playIcon.style.display = "block";
-  });
-  audio.addEventListener("ended", () => {
-    audio.currentTime = 0;
-    audio.pause();
-  });
-  audio.addEventListener("loadedmetadata", () => {
-    totalTimeEl.textContent = formatTime(audio.duration);
-    progressBar.max = audio.duration;
-  });
-  audio.addEventListener("timeupdate", () => {
-    currentTimeEl.textContent = formatTime(audio.currentTime);
-    progressBar.value = audio.currentTime;
-    updateProgressBarUI();
-  });
-  progressBar.addEventListener("input", (e) => {
-    if (audio.src) {
-      audio.currentTime = e.target.value;
-      updateProgressBarUI();
+    audio.addEventListener("play", function () {
+      playIcon.style.display = "none";
+      pauseIcon.style.display = "block";
+    });
+
+    audio.addEventListener("pause", function () {
+      pauseIcon.style.display = "block";
+      playIcon.style.display = "none";
+    });
+
+    audio.addEventListener("ended", function () {
+      audio.currentTime = 0;
+      pauseIcon.style.display = "none";
+      playIcon.style.display = "block";
+      updateProgressBar();
+    });
+
+    audio.addEventListener("error", function (e) {
+      console.error("Audio error:", e);
+      showError("Audio playback failed");
+      pauseIcon.style.display = "none";
+      playIcon.style.display = "block";
+    });
+
+    // Start playing
+    audio.play().catch(function (error) {
+      console.error("Playback failed:", error);
+      showError("Playback failed - " + error.message);
+      pauseIcon.style.display = "none";
+      playIcon.style.display = "block";
+    });
+  }
+
+  // Progress bar scrubbing
+  progressBar.addEventListener("input", function () {
+    if (audio && audio.duration) {
+      audio.currentTime = parseFloat(this.value);
+      updateProgressBar();
     }
   });
-  themeToggle.addEventListener("click", () =>
-    updateTheme(currentTheme === "light" ? "dark" : "light")
-  );
-  speedBtn.addEventListener("click", () => {
-    setupSpeedModal();
-    speedModal.style.display = "flex";
-  });
-  voiceBtn.addEventListener("click", () => {
-    setupVoiceModal();
-    voiceModal.style.display = "flex";
-  });
-  speedModal.addEventListener("click", (e) => {
-    if (e.target === speedModal) speedModal.style.display = "none";
-  });
-  voiceModal.addEventListener("click", (e) => {
-    if (e.target === voiceModal) voiceModal.style.display = "none";
+
+  // Progress bar mouse events for better UX
+  progressBar.addEventListener("mousedown", function () {
+    if (audio && !audio.paused) {
+      audio.pause();
+      this.dataset.wasPlaying = "true";
+    }
   });
 
-  // --- INITIALIZATION ---
-  updateTheme(currentTheme);
-  updateAILogo();
-  articleTitleEl.textContent = aiVoiceData.title;
-  updateProgressBarUI();
+  progressBar.addEventListener("mouseup", function () {
+    if (audio && this.dataset.wasPlaying === "true") {
+      audio.play();
+      delete this.dataset.wasPlaying;
+    }
+  });
+
+  // Speed control
+  speedBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    showSpeedModal();
+  });
+
+  function showSpeedModal() {
+    // Remove existing modal if any
+    const existingModal = document.getElementById("ai-voice-speed-modal");
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Create new modal
+    const modal = document.createElement("div");
+    modal.id = "ai-voice-speed-modal";
+    modal.className = "speed-modal";
+
+    const content = document.createElement("div");
+    content.className = "speed-modal-content";
+    modal.appendChild(content);
+
+    speeds.forEach((speed) => {
+      const btn = document.createElement("button");
+      btn.className =
+        "speed-option" + (speed === currentSpeed ? " active" : "");
+      btn.textContent = speed + "x";
+      btn.addEventListener("click", function () {
+        currentSpeed = speed;
+        speedBtn.textContent = speed + "x";
+        if (audio) {
+          audio.playbackRate = speed;
+        }
+        modal.remove();
+      });
+      content.appendChild(btn);
+    });
+
+    document.body.appendChild(modal);
+    modal.style.display = "flex";
+
+    // Close on outside click
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+
+    // Close on escape key
+    function handleEscape(e) {
+      if (e.key === "Escape") {
+        modal.remove();
+        document.removeEventListener("keydown", handleEscape);
+      }
+    }
+    document.addEventListener("keydown", handleEscape);
+
+    // Auto-close after 5 seconds
+    setTimeout(function () {
+      if (document.contains(modal)) {
+        modal.remove();
+      }
+    }, 5000);
+  }
+
+  // Error display
+  function showError(message) {
+    const title = player.querySelector(".title");
+    const originalText = title.textContent;
+    const originalColor = title.style.color;
+
+    title.textContent = "Error: " + message;
+    title.style.color = "#ef4444";
+
+    setTimeout(function () {
+      title.textContent = originalText;
+      title.style.color = originalColor;
+    }, 5000);
+  }
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", function (e) {
+    // Only if player is visible and focused area
+    if (!player.offsetParent) return;
+
+    switch (e.code) {
+      case "Space":
+        // Prevent if user is typing in an input
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")
+          return;
+        e.preventDefault();
+        playBtn.click();
+        break;
+      case "ArrowLeft":
+        if (audio && e.target.tagName !== "INPUT") {
+          e.preventDefault();
+          audio.currentTime = Math.max(0, audio.currentTime - 10);
+        }
+        break;
+      case "ArrowRight":
+        if (audio && e.target.tagName !== "INPUT") {
+          e.preventDefault();
+          audio.currentTime = Math.min(audio.duration, audio.currentTime + 10);
+        }
+        break;
+    }
+  });
+
+  // Initialize progress bar
+  updateProgressBar();
+
+  // Handle page visibility changes (pause when tab is hidden)
+  document.addEventListener("visibilitychange", function () {
+    if (audio && !audio.paused && document.hidden) {
+      audio.pause();
+    }
+  });
+
+  // Clean up on page unload
+  window.addEventListener("beforeunload", function () {
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+    }
+  });
 });
