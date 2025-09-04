@@ -474,6 +474,9 @@ class AIVoice_Public {
         $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
         if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
         
+        // Inject custom colors from settings
+        $this->inject_custom_colors();
+        
         wp_localize_script('ai-voice-player-js', 'aiVoiceData', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('ai_voice_nonce'),
@@ -482,5 +485,83 @@ class AIVoice_Public {
             'theme' => esc_attr($theme),
             'aiService' => esc_attr($ai_service),
         ]);
+    }
+
+    private function inject_custom_colors() {
+        // Get custom colors from settings
+        $bg_light = $this->settings['bg_color_light'] ?? '#ffffff';
+        $bg_dark = $this->settings['bg_color_dark'] ?? '#1e293b';
+        $text_light = $this->settings['text_color_light'] ?? '#0f172a';
+        $text_dark = $this->settings['text_color_dark'] ?? '#f1f5f9';
+        $accent_light = $this->settings['accent_color_light'] ?? '#3b82f6';
+        $accent_dark = $this->settings['accent_color_dark'] ?? '#60a5fa';
+
+        // Generate secondary colors (lighter versions for backgrounds)
+        $bg_secondary_light = $this->lighten_color($bg_light, 0.04);
+        $bg_secondary_dark = $this->lighten_color($bg_dark, 0.15);
+        $text_secondary_light = $this->lighten_color($text_light, 0.4);
+        $text_secondary_dark = $this->darken_color($text_dark, 0.3);
+        $border_light = $this->lighten_color($text_light, 0.8);
+        $border_dark = $this->lighten_color($bg_dark, 0.25);
+        $accent_hover_light = $this->darken_color($accent_light, 0.1);
+        $accent_hover_dark = $this->darken_color($accent_dark, 0.1);
+
+        // Create inline CSS with custom colors
+        $custom_css = "
+        #ai-voice-player-wrapper {
+            --bg-light: {$bg_light};
+            --bg-secondary-light: {$bg_secondary_light};
+            --text-primary-light: {$text_light};
+            --text-secondary-light: {$text_secondary_light};
+            --accent-light: {$accent_light};
+            --accent-hover-light: {$accent_hover_light};
+            --border-light: {$border_light};
+            
+            --bg-dark: {$bg_dark};
+            --bg-secondary-dark: {$bg_secondary_dark};
+            --text-primary-dark: {$text_dark};
+            --text-secondary-dark: {$text_secondary_dark};
+            --accent-dark: {$accent_dark};
+            --accent-hover-dark: {$accent_hover_dark};
+            --border-dark: {$border_dark};
+        }";
+
+        wp_add_inline_style('ai-voice-player-css', $custom_css);
+    }
+
+    private function lighten_color($hex, $percent) {
+        // Remove # if present
+        $hex = ltrim($hex, '#');
+        
+        // Convert hex to RGB
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        
+        // Lighten
+        $r = min(255, $r + (255 - $r) * $percent);
+        $g = min(255, $g + (255 - $g) * $percent);
+        $b = min(255, $b + (255 - $b) * $percent);
+        
+        // Convert back to hex
+        return sprintf('#%02x%02x%02x', round($r), round($g), round($b));
+    }
+
+    private function darken_color($hex, $percent) {
+        // Remove # if present
+        $hex = ltrim($hex, '#');
+        
+        // Convert hex to RGB
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        
+        // Darken
+        $r = max(0, $r * (1 - $percent));
+        $g = max(0, $g * (1 - $percent));
+        $b = max(0, $b * (1 - $percent));
+        
+        // Convert back to hex
+        return sprintf('#%02x%02x%02x', round($r), round($g), round($b));
     }
 }

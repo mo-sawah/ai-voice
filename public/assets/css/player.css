@@ -1,9 +1,9 @@
 /* Import Google Font */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
-/* --- Variable Definitions --- */
+/* --- Variable Definitions (Default Fallbacks) --- */
 #ai-voice-player-wrapper {
-  /* Light Theme Colors */
+  /* Light Theme Colors - Fallbacks (will be overridden by PHP) */
   --bg-light: #ffffff;
   --bg-secondary-light: #f1f5f9;
   --text-primary-light: #0f172a;
@@ -12,7 +12,7 @@
   --accent-hover-light: #2563eb;
   --border-light: #e2e8f0;
 
-  /* Dark Theme Colors */
+  /* Dark Theme Colors - Fallbacks (will be overridden by PHP) */
   --bg-dark: #1e293b;
   --bg-secondary-dark: #334155;
   --text-primary-dark: #f1f5f9;
@@ -120,13 +120,13 @@
   margin: 0;
   padding-right: 1rem;
   line-height: 1.2;
-  color: var(--text-primary-light); /* Explicitly set light theme color */
+  color: var(--text-primary-light);
   transition: color 0.3s ease;
 }
 #ai-voice-player-wrapper
   .ai-voice-player-container[data-theme="dark"]
   .article-title {
-  color: var(--text-primary-dark); /* FIX: Set correct color for dark mode */
+  color: var(--text-primary-dark);
 }
 #ai-voice-player-wrapper .ai-logo-container {
   display: flex;
