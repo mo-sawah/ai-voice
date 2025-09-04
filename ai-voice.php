@@ -3,7 +3,7 @@
  * Plugin Name:       AI Voice
  * Plugin URI:        https://sawahsolutions.com
  * Description:       Generates beautiful, AI-powered audio players for your articles using Google TTS and OpenAI TTS APIs.
- * Version:           3.1.0
+ * Version:           3.1.1
  * Author:            Mohamed Sawah
  * Author URI:        https://sawahsolutions.com
  * License:           GPL-2.0+
@@ -17,7 +17,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'AI_VOICE_VERSION', '3.1.0' );
+define( 'AI_VOICE_VERSION', '3.1.1' );
 define( 'AI_VOICE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AI_VOICE_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

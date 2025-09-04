@@ -5,7 +5,7 @@
 #ai-voice-player-wrapper {
   /* Light Theme Colors - Fallbacks (will be overridden by PHP) */
   --bg-light: #ffffff;
-  --bg-secondary-light: #f1f5f9;
+  --bg-secondary-light: #f1f5f9 !important;
   --text-primary-light: #0f172a;
   --text-secondary-light: #64748b;
   --accent-light: #3b82f6;
@@ -357,7 +357,7 @@
 }
 #ai-voice-player-wrapper .modal-grid button,
 #ai-voice-player-wrapper .modal-voice-list button {
-  padding: 0.75rem;
+  padding: 1px 20px;
   border-radius: 0.5rem;
   font-weight: 600;
   transition: all 0.2s ease;
