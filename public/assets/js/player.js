@@ -26,11 +26,17 @@ document.addEventListener("DOMContentLoaded", () => {
   let isGenerating = false;
   let currentTheme = aiVoiceData.theme || "light";
   let currentSpeed = 1.0;
+  let generationAttempts = 0;
+  const maxGenerationAttempts = 2;
+
   const voices = {
     google: [
       { id: "en-US-Studio-O", name: "Studio (Female)" },
+      { id: "en-US-Studio-M", name: "Studio (Male)" },
       { id: "en-US-Neural2-J", name: "Neural (Male)" },
+      { id: "en-US-Neural2-F", name: "Neural (Female)" },
       { id: "en-US-Wavenet-F", name: "WaveNet (Female)" },
+      { id: "en-US-Wavenet-D", name: "WaveNet (Male)" },
     ],
     gemini: [
       { id: "Kore", name: "Kore (Firm)" },
@@ -70,45 +76,123 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBar.style.background = `linear-gradient(to right, ${accentColor} ${percentage}%, ${bgColor} ${percentage}%)`;
   };
 
+  const resetPlayerState = () => {
+    isGenerating = false;
+    playPauseBtn.disabled = false;
+    loader.style.display = "none";
+    playIcon.style.display = "block";
+    pauseIcon.style.display = "none";
+    generationAttempts = 0;
+  };
+
+  const showError = (message) => {
+    articleTitleEl.textContent = "Error: " + message;
+    articleTitleEl.style.color = "#ef4444";
+    console.error("AI Voice Error:", message);
+    resetPlayerState();
+  };
+
+  const clearError = () => {
+    articleTitleEl.textContent = aiVoiceData.title;
+    articleTitleEl.style.color = "";
+  };
+
   const togglePlayPause = () => {
     if (isGenerating) return;
+
     if (!audio.src) {
       generateAudio();
       return;
     }
+
+    clearError();
     audio.paused ? audio.play() : audio.pause();
   };
 
   const getVisibleText = () => {
-    let contentNode = wrapper.closest("article, .post, .entry-content, main");
+    let contentNode = wrapper.closest(
+      "article, .post, .entry-content, main, .content"
+    );
     if (!contentNode) {
       contentNode = wrapper.parentElement;
     }
+
     const clone = contentNode.cloneNode(true);
+
+    // Remove the player itself
     const playerClone = clone.querySelector("#ai-voice-player-wrapper");
     if (playerClone) playerClone.remove();
+
+    // Remove unwanted elements
     clone
-      .querySelectorAll('script, style, noscript, .ads, [aria-hidden="true"]')
+      .querySelectorAll(
+        [
+          "script",
+          "style",
+          "noscript",
+          "nav",
+          "header",
+          "footer",
+          ".ads",
+          ".advertisement",
+          ".sidebar",
+          ".menu",
+          ".navigation",
+          '[aria-hidden="true"]',
+          ".screen-reader-text",
+          ".wp-caption-text",
+          ".social-share",
+          ".related-posts",
+          ".comments",
+          ".comment-form",
+        ].join(",")
+      )
       .forEach((el) => el.remove());
-    return clone.textContent.replace(/\s+/g, " ").trim();
+
+    let text = clone.textContent || clone.innerText || "";
+
+    // Clean up the text
+    text = text.replace(/\s+/g, " ").trim();
+
+    // Remove common unwanted phrases
+    text = text.replace(
+      /^(Skip to content|Menu|Search|Home|About|Contact)[\s\n]*/gi,
+      ""
+    );
+    text = text.replace(
+      /(Copyright|©|\d{4}|All rights reserved|Privacy Policy|Terms of Service).*$/gi,
+      ""
+    );
+
+    return text;
   };
 
   const generateAudio = () => {
+    if (isGenerating) return;
+
+    generationAttempts++;
     isGenerating = true;
     playPauseBtn.disabled = true;
     playIcon.style.display = "none";
     loader.style.display = "block";
 
+    // Show generating status
+    articleTitleEl.textContent = "Generating audio...";
+    articleTitleEl.style.color = "";
+
     const textToSpeak = getVisibleText();
 
-    if (!textToSpeak) {
-      isGenerating = false;
-      playPauseBtn.disabled = false;
-      loader.style.display = "none";
-      articleTitleEl.textContent = "No text found on page.";
-      playIcon.style.display = "block";
+    if (!textToSpeak || textToSpeak.trim().length < 10) {
+      showError("No readable text found on this page.");
       return;
     }
+
+    // Show text length info for debugging
+    console.log(
+      "AI Voice: Processing text length:",
+      textToSpeak.length,
+      "characters"
+    );
 
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
@@ -119,28 +203,84 @@ document.addEventListener("DOMContentLoaded", () => {
         post_id: aiVoiceData.post_id,
         text_to_speak: textToSpeak,
       },
-      timeout: 120000, // Increase timeout to 120 seconds (2 minutes) for chunk processing
+      timeout: 180000, // Increased to 3 minutes
       success: function (response) {
-        isGenerating = false;
-        playPauseBtn.disabled = false;
-        loader.style.display = "none";
+        console.log("AI Voice: Generation response:", response);
+
         if (response.success) {
           audio.src = response.data.audioUrl;
-          audio.play();
+          clearError();
+
+          // Auto-play after successful generation
+          audio.play().catch((error) => {
+            console.warn("AI Voice: Auto-play prevented by browser:", error);
+            resetPlayerState();
+          });
+
+          generationAttempts = 0; // Reset on success
         } else {
-          articleTitleEl.textContent =
-            "Error: " + (response.data.message || "Generation failed.");
-          console.error("AI Voice Error:", response.data.message);
-          playIcon.style.display = "block";
+          const errorMsg = response.data?.message || "Generation failed.";
+
+          // Retry logic for certain errors
+          if (
+            generationAttempts < maxGenerationAttempts &&
+            (errorMsg.includes("timeout") || errorMsg.includes("temporary"))
+          ) {
+            console.log(
+              "AI Voice: Retrying generation, attempt",
+              generationAttempts + 1
+            );
+            setTimeout(() => {
+              isGenerating = false;
+              generateAudio();
+            }, 2000);
+            return;
+          }
+
+          showError(errorMsg);
         }
       },
       error: function (jqXHR, textStatus, errorThrown) {
-        isGenerating = false;
-        playPauseBtn.disabled = false;
-        loader.style.display = "none";
-        articleTitleEl.textContent = "Error: Request timed out.";
-        console.error("AI Voice AJAX Error:", textStatus, errorThrown);
-        playIcon.style.display = "block";
+        console.error("AI Voice: AJAX Error:", {
+          status: jqXHR.status,
+          textStatus,
+          errorThrown,
+          responseText: jqXHR.responseText?.substring(0, 500),
+        });
+
+        let errorMessage = "Request failed.";
+
+        if (textStatus === "timeout") {
+          errorMessage = "Request timed out. The text might be too long.";
+        } else if (jqXHR.status === 524) {
+          errorMessage = "Server timeout. Please try with shorter text.";
+        } else if (jqXHR.status === 500) {
+          errorMessage = "Server error. Please try again.";
+        } else if (jqXHR.status === 0) {
+          errorMessage = "Network error. Check your internet connection.";
+        }
+
+        // Retry for network/timeout errors
+        if (
+          generationAttempts < maxGenerationAttempts &&
+          (textStatus === "timeout" ||
+            jqXHR.status === 524 ||
+            jqXHR.status === 0)
+        ) {
+          console.log(
+            "AI Voice: Retrying due to",
+            textStatus,
+            "- attempt",
+            generationAttempts + 1
+          );
+          setTimeout(() => {
+            isGenerating = false;
+            generateAudio();
+          }, 3000);
+          return;
+        }
+
+        showError(errorMessage);
       },
     });
   };
@@ -160,13 +300,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateAILogo = () => {
     const service = aiVoiceData.aiService || "google";
+
+    // Fixed SVG paths
     if (service === "google") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.19,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.t2 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z"></path></svg><span>Voiced by Google Cloud</span>`;
+      aiLogoContainer.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        <span>Voiced by Google Cloud</span>`;
     } else if (service === "gemini") {
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.5a9.5 9.5 0 1 0 9.5 9.5A9.5 9.5 0 0 0 12 2.5ZM12 23a11 11 0 1 1 11-11 11 11 0 0 1-11 11Z"/><path d="M12 5.5a6.5 6.5 0 1 0 6.5 6.5A6.5 6.5 0 0 0 12 5.5Zm0 11a4.5 4.5 0 1 1 4.5-4.5 4.5 4.5 0 0 1-4.5 4.5Z"/></svg><span>Voiced by Gemini</span>`;
-    } else {
-      // This will now correctly be 'openai'
-      aiLogoContainer.innerHTML = `<svg width="18" height="18" viewBox="0 0 41 41" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M35.65,10.96a16.5,16.5,0,0,0-23.33,0L5,18.29l7.33-7.33a16.5,16.5,0,0,0,23.33,0l4.95,4.95-4.95-4.95ZM12.33,29.32,5,22,18.29,35.31a16.48,16.48,0,0,0,11-4.8L22,22Z" ></path></svg><span>Voiced by OpenAI</span>`;
+      aiLogoContainer.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7v10c0 5.55 3.84 9.74 9 11 5.16-1.26 9-5.45 9-11V7l-10-5z"/>
+          <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 8c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+        </svg>
+        <span>Voiced by Gemini</span>`;
+    } else if (service === "openai") {
+      aiLogoContainer.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.282 9.821c-.29-2.737-2.2-4.648-4.937-4.937a5.85 5.85 0 0 0-4.546 1.567 5.85 5.85 0 0 0-4.546-1.567c-2.737.289-4.647 2.2-4.937 4.937a5.85 5.85 0 0 0 1.567 4.546 5.85 5.85 0 0 0-1.567 4.546c.29 2.737 2.2 4.647 4.937 4.937a5.85 5.85 0 0 0 4.546-1.567 5.85 5.85 0 0 0 4.546 1.567c2.737-.29 4.647-2.2 4.937-4.937a5.85 5.85 0 0 0-1.567-4.546 5.85 5.85 0 0 0 1.567-4.546zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
+        </svg>
+        <span>Voiced by OpenAI</span>`;
     }
   };
 
@@ -182,7 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
         audio.playbackRate = currentSpeed;
         speedBtn.textContent = `${s}x`;
         speedModal.style.display = "none";
-        // Reactivate buttons in the modal
+        // Update active state
         speedContainer
           .querySelectorAll("button")
           .forEach((b) => b.classList.remove("active"));
@@ -198,60 +355,95 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentVoices = voices[aiVoiceData.aiService] || voices.google;
     currentVoices.forEach((voice, index) => {
       const btn = document.createElement("button");
-      // In a real scenario, you'd fetch and compare the current voice ID
       btn.className = index === 0 ? "active" : "";
       btn.textContent = voice.name;
-      // Note: Voice changing on the fly is a premium feature that would require
-      // regenerating audio. This UI is for demonstration.
+      btn.onclick = () => {
+        // Note: Voice changing would require regenerating audio
+        // This is just UI demonstration
+        voiceModal.style.display = "none";
+      };
       voiceContainer.appendChild(btn);
     });
   };
 
   // --- EVENT LISTENERS ---
   playPauseBtn.addEventListener("click", togglePlayPause);
+
   audio.addEventListener("play", () => {
     playIcon.style.display = "none";
     pauseIcon.style.display = "block";
+    isGenerating = false;
+    playPauseBtn.disabled = false;
+    loader.style.display = "none";
   });
+
   audio.addEventListener("pause", () => {
     pauseIcon.style.display = "none";
     playIcon.style.display = "block";
   });
+
   audio.addEventListener("ended", () => {
     audio.currentTime = 0;
     audio.pause();
   });
+
   audio.addEventListener("loadedmetadata", () => {
     totalTimeEl.textContent = formatTime(audio.duration);
     progressBar.max = audio.duration;
   });
+
   audio.addEventListener("timeupdate", () => {
     currentTimeEl.textContent = formatTime(audio.currentTime);
     progressBar.value = audio.currentTime;
     updateProgressBarUI();
   });
+
+  audio.addEventListener("error", (e) => {
+    console.error("AI Voice: Audio error:", e);
+    showError("Audio playback failed. Please try regenerating.");
+    audio.src = ""; // Clear the source to allow regeneration
+  });
+
+  audio.addEventListener("loadstart", () => {
+    clearError();
+  });
+
   progressBar.addEventListener("input", (e) => {
-    if (audio.src) {
-      audio.currentTime = e.target.value;
+    if (audio.src && audio.duration) {
+      audio.currentTime = parseFloat(e.target.value);
       updateProgressBarUI();
     }
   });
+
   themeToggle.addEventListener("click", () =>
     updateTheme(currentTheme === "light" ? "dark" : "light")
   );
+
   speedBtn.addEventListener("click", () => {
     setupSpeedModal();
     speedModal.style.display = "flex";
   });
+
   voiceBtn.addEventListener("click", () => {
     setupVoiceModal();
     voiceModal.style.display = "flex";
   });
+
+  // Close modals when clicking outside
   speedModal.addEventListener("click", (e) => {
     if (e.target === speedModal) speedModal.style.display = "none";
   });
+
   voiceModal.addEventListener("click", (e) => {
     if (e.target === voiceModal) voiceModal.style.display = "none";
+  });
+
+  // Close modals on Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      speedModal.style.display = "none";
+      voiceModal.style.display = "none";
+    }
   });
 
   // --- INITIALIZATION ---
@@ -259,4 +451,9 @@ document.addEventListener("DOMContentLoaded", () => {
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.title;
   updateProgressBarUI();
+
+  // Set initial playback rate
+  audio.playbackRate = currentSpeed;
+
+  console.log("AI Voice Player initialized successfully");
 });
