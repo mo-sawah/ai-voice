@@ -36,6 +36,8 @@ class AIVoice_Settings {
     public function render_settings_page() {
         $options = get_option( 'ai_voice_settings' );
         $google_voices = $this->get_google_voices();
+        $openrouter_models = $this->get_openrouter_models();
+        $chatgpt_models = $this->get_chatgpt_models();
         ?>
         <div class="wrap">
             <h1>AI Voice Settings</h1>
@@ -43,8 +45,9 @@ class AIVoice_Settings {
                 <?php
                 settings_fields( 'ai_voice_group' );
                 ?>
+                
                 <h2 class="title">API Keys</h2>
-                <p>Enter your API keys from Google Cloud, Google AI (Gemini), and OpenAI.</p>
+                <p>Enter your API keys from Google Cloud, Google AI (Gemini), OpenAI, and summary services.</p>
                 <table class="form-table">
                     <tbody>
                         <tr>
@@ -61,9 +64,79 @@ class AIVoice_Settings {
                             <th scope="row"><label for="ai_voice_settings[openai_api_key]">OpenAI API Key</label></th>
                             <td><input type="text" name="ai_voice_settings[openai_api_key]" value="<?php echo esc_attr( $options['openai_api_key'] ?? '' ); ?>" class="regular-text"></td>
                         </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[openrouter_api_key]">OpenRouter API Key</label></th>
+                            <td><input type="text" name="ai_voice_settings[openrouter_api_key]" value="<?php echo esc_attr( $options['openrouter_api_key'] ?? '' ); ?>" class="regular-text">
+                            <p class="description">For AI-powered article summaries via OpenRouter.</p></td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[chatgpt_api_key]">ChatGPT API Key</label></th>
+                            <td><input type="text" name="ai_voice_settings[chatgpt_api_key]" value="<?php echo esc_attr( $options['chatgpt_api_key'] ?? '' ); ?>" class="regular-text">
+                            <p class="description">Alternative to OpenRouter for summaries (uses OpenAI directly).</p></td>
+                        </tr>
                     </tbody>
                 </table>
                 
+                <h2 class="title">Summary Settings</h2>
+                <p>Configure the AI-powered summary feature that generates key takeaways from articles.</p>
+                <table class="form-table">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[enable_summary]">Enable Summary Feature</label></th>
+                            <td><input type="checkbox" name="ai_voice_settings[enable_summary]" value="1" <?php checked( isset($options['enable_summary']) ? $options['enable_summary'] : 0, 1 ); ?>> <span class="description">Show the summary button next to the play button.</span></td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[summary_api]">Summary API Service</label></th>
+                            <td>
+                                <select id="ai_voice_summary_api" name="ai_voice_settings[summary_api]">
+                                    <option value="openrouter" <?php selected( $options['summary_api'] ?? 'openrouter', 'openrouter' ); ?>>OpenRouter</option>
+                                    <option value="chatgpt" <?php selected( $options['summary_api'] ?? 'openrouter', 'chatgpt' ); ?>>ChatGPT (OpenAI Direct)</option>
+                                </select>
+                                <p class="description">OpenRouter provides access to multiple AI models. ChatGPT uses OpenAI's API directly.</p>
+                            </td>
+                        </tr>
+                        <tr class="ai-voice-summary-row" data-api="openrouter">
+                            <th scope="row"><label for="ai_voice_settings[summary_model]">OpenRouter Model</label></th>
+                            <td>
+                                <select name="ai_voice_settings[summary_model]">
+                                    <?php
+                                    $current_model = $options['summary_model'] ?? 'anthropic/claude-3-haiku';
+                                    foreach ($openrouter_models as $category => $models) {
+                                        echo '<optgroup label="' . esc_attr($category) . '">';
+                                        foreach ($models as $model_id => $model_name) {
+                                            echo '<option value="' . esc_attr($model_id) . '" ' . selected($current_model, $model_id, false) . '>' . esc_html($model_name) . '</option>';
+                                        }
+                                        echo '</optgroup>';
+                                    }
+                                    ?>
+                                </select>
+                                <p class="description">Claude and GPT models work best for generating concise takeaways.</p>
+                            </td>
+                        </tr>
+                        <tr class="ai-voice-summary-row" data-api="chatgpt">
+                            <th scope="row"><label for="ai_voice_settings[chatgpt_model]">ChatGPT Model</label></th>
+                            <td>
+                                <select name="ai_voice_settings[chatgpt_model]">
+                                    <?php
+                                    $current_chatgpt_model = $options['chatgpt_model'] ?? 'gpt-3.5-turbo';
+                                    foreach ($chatgpt_models as $model_id => $model_name) {
+                                        echo '<option value="' . esc_attr($model_id) . '" ' . selected($current_chatgpt_model, $model_id, false) . '>' . esc_html($model_name) . '</option>';
+                                    }
+                                    ?>
+                                </select>
+                                <p class="description">GPT-3.5 is faster and cheaper, GPT-4 provides higher quality summaries.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[summary_prompt]">Summary Prompt</label></th>
+                            <td>
+                                <textarea name="ai_voice_settings[summary_prompt]" rows="4" cols="50" class="large-text"><?php echo esc_textarea( $options['summary_prompt'] ?? 'Create 3-5 key takeaways from this article. Each takeaway should be 1-2 lines maximum. Focus on the most important insights and actionable information.' ); ?></textarea>
+                                <p class="description">The prompt sent to the AI model to generate summaries. Keep it concise for best results.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
                 <h2 class="title">Default Player Settings</h2>
                 <p>These are the default settings for the audio player. They can be overridden for individual posts.</p>
                  <table class="form-table">
@@ -177,6 +250,11 @@ class AIVoice_Settings {
                             <td><input type="color" name="ai_voice_settings[accent_color_light]" value="<?php echo esc_attr( $options['accent_color_light'] ?? '#3b82f6' ); ?>"></td>
                             <td><input type="color" name="ai_voice_settings[accent_color_dark]" value="<?php echo esc_attr( $options['accent_color_dark'] ?? '#60a5fa' ); ?>"></td>
                         </tr>
+                        <tr>
+                            <th scope="row">Summary Button</th>
+                            <td><input type="color" name="ai_voice_settings[summary_color_light]" value="<?php echo esc_attr( $options['summary_color_light'] ?? '#6b7280' ); ?>"></td>
+                            <td><input type="color" name="ai_voice_settings[summary_color_dark]" value="<?php echo esc_attr( $options['summary_color_dark'] ?? '#9ca3af' ); ?>"></td>
+                        </tr>
                     </tbody>
                 </table>
 
@@ -249,5 +327,33 @@ class AIVoice_Settings {
             ]
         ];
     }
-}
 
+    public function get_openrouter_models() {
+        return [
+            'Anthropic (Recommended)' => [
+                'anthropic/claude-3-haiku' => 'Claude 3 Haiku (Fast & Affordable)',
+                'anthropic/claude-3-sonnet' => 'Claude 3 Sonnet (Balanced)',
+                'anthropic/claude-3-opus' => 'Claude 3 Opus (Highest Quality)',
+            ],
+            'OpenAI' => [
+                'openai/gpt-3.5-turbo' => 'GPT-3.5 Turbo (Fast)',
+                'openai/gpt-4' => 'GPT-4 (High Quality)',
+                'openai/gpt-4-turbo' => 'GPT-4 Turbo (Latest)',
+            ],
+            'Meta' => [
+                'meta-llama/llama-2-70b-chat' => 'Llama 2 70B (Open Source)',
+            ],
+            'Google' => [
+                'google/gemini-pro' => 'Gemini Pro',
+            ]
+        ];
+    }
+
+    public function get_chatgpt_models() {
+        return [
+            'gpt-3.5-turbo' => 'GPT-3.5 Turbo (Fast & Affordable)',
+            'gpt-4' => 'GPT-4 (High Quality)',
+            'gpt-4-turbo-preview' => 'GPT-4 Turbo (Latest)',
+        ];
+    }
+}

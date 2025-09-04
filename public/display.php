@@ -16,6 +16,9 @@ class AIVoice_Public {
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_ajax_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
+        // AJAX handler for summary generation
+        add_action( 'wp_ajax_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
+        add_action( 'wp_ajax_nopriv_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
     }
 
     public function enqueue_assets() {
@@ -58,16 +61,16 @@ class AIVoice_Public {
     }
 
     public function handle_generate_audio_ajax() {
-        check_ajax_referer( 'ai_voice_nonce', 'nonce' );
+        check_ajax_referer('ai_voice_nonce', 'nonce');
 
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
         if (!$post_id) {
-            wp_send_json_error( [ 'message' => 'Invalid Post ID.' ] );
+            wp_send_json_error(['message' => 'Invalid Post ID.']);
         }
-        
+
         $text_to_speak = isset($_POST['text_to_speak']) ? wp_kses_post(stripslashes($_POST['text_to_speak'])) : '';
         if (empty(trim($text_to_speak))) {
-            wp_send_json_error( [ 'message' => 'No visible text content was found to read.' ] );
+            wp_send_json_error(['message' => 'No visible text content was found to read.']);
         }
 
         // Limit text length to prevent timeouts
@@ -87,10 +90,218 @@ class AIVoice_Public {
         $generation_result = $this->generate_chunked_audio($post_id, $text_to_speak);
 
         if (is_wp_error($generation_result)) {
-            wp_send_json_error( [ 'message' => $generation_result->get_error_message() ] );
+            wp_send_json_error(['message' => $generation_result->get_error_message()]);
         } else {
-            wp_send_json_success( [ 'audioUrl' => $generation_result ] );
+            wp_send_json_success(['audioUrl' => $generation_result]);
         }
+    }
+
+    public function handle_generate_summary_ajax() {
+        check_ajax_referer('ai_voice_nonce', 'nonce');
+
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        if (!$post_id) {
+            wp_send_json_error(['message' => 'Invalid Post ID.']);
+        }
+
+        $text_to_summarize = isset($_POST['text_to_summarize']) ? wp_kses_post(stripslashes($_POST['text_to_summarize'])) : '';
+        if (empty(trim($text_to_summarize))) {
+            wp_send_json_error(['message' => 'No text content found to summarize.']);
+        }
+
+        // Check for cached summary
+        $content_hash = md5($text_to_summarize);
+        $cached_summary = get_post_meta($post_id, '_ai_voice_summary_' . $content_hash, true);
+        if (!empty($cached_summary)) {
+            wp_send_json_success(['summary' => $cached_summary]);
+            return;
+        }
+
+        // Generate new summary
+        $summary_result = $this->generate_summary($post_id, $text_to_summarize);
+
+        if (is_wp_error($summary_result)) {
+            wp_send_json_error(['message' => $summary_result->get_error_message()]);
+        } else {
+            // Cache the summary
+            update_post_meta($post_id, '_ai_voice_summary_' . $content_hash, $summary_result);
+            wp_send_json_success(['summary' => $summary_result]);
+        }
+    }
+
+    private function generate_summary($post_id, $text_to_summarize) {
+        // Get summary settings
+        $summary_api = $this->settings['summary_api'] ?? 'openrouter';
+        $summary_model = $this->settings['summary_model'] ?? 'anthropic/claude-3-haiku';
+        $summary_prompt = $this->settings['summary_prompt'] ?? 'Create 3-5 key takeaways from this article. Each takeaway should be 1-2 lines maximum. Focus on the most important insights and actionable information.';
+
+        // Clean and limit text length for summary (longer than TTS)
+        if (strlen($text_to_summarize) > 15000) {
+            $text_to_summarize = substr($text_to_summarize, 0, 15000) . '...';
+        }
+
+        $text_to_summarize = $this->clean_text_for_tts($text_to_summarize);
+
+        if ($summary_api === 'openrouter') {
+            return $this->generate_openrouter_summary($text_to_summarize, $summary_model, $summary_prompt);
+        } else if ($summary_api === 'chatgpt') {
+            return $this->generate_chatgpt_summary($text_to_summarize, $summary_model, $summary_prompt);
+        }
+
+        return new WP_Error('invalid_api', 'Invalid summary API selected.');
+    }
+
+    private function generate_openrouter_summary($text, $model, $prompt) {
+        $api_key = $this->settings['openrouter_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'OpenRouter API key not configured.');
+        }
+
+        $api_url = 'https://openrouter.ai/api/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => $prompt
+            ],
+            [
+                'role' => 'user', 
+                'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text
+            ]
+        ];
+
+        $body = [
+            'model' => $model,
+            'messages' => $messages,
+            'max_tokens' => 500,
+            'temperature' => 0.3
+        ];
+
+        $args = [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json',
+                'HTTP-Referer' => home_url(),
+                'X-Title' => get_bloginfo('name')
+            ],
+            'body' => json_encode($body)
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('openrouter_request_failed', 'OpenRouter request failed: ' . $response->get_error_message());
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_data = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($response_code !== 200) {
+            $error_message = 'OpenRouter API Error (Code: ' . $response_code . ')';
+            if (isset($response_data['error']['message'])) {
+                $error_message .= ': ' . $response_data['error']['message'];
+            }
+            return new WP_Error('openrouter_api_error', $error_message);
+        }
+
+        if (!isset($response_data['choices'][0]['message']['content'])) {
+            return new WP_Error('openrouter_no_content', 'OpenRouter did not return summary content.');
+        }
+
+        return $this->format_summary($response_data['choices'][0]['message']['content']);
+    }
+
+    private function generate_chatgpt_summary($text, $model, $prompt) {
+        $api_key = $this->settings['chatgpt_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'ChatGPT API key not configured.');
+        }
+
+        $api_url = 'https://api.openai.com/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => $prompt
+            ],
+            [
+                'role' => 'user',
+                'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text
+            ]
+        ];
+
+        $body = [
+            'model' => $model,
+            'messages' => $messages,
+            'max_tokens' => 500,
+            'temperature' => 0.3
+        ];
+
+        $args = [
+            'timeout' => 30,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode($body)
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('chatgpt_request_failed', 'ChatGPT request failed: ' . $response->get_error_message());
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_data = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($response_code !== 200) {
+            $error_message = 'ChatGPT API Error (Code: ' . $response_code . ')';
+            if (isset($response_data['error']['message'])) {
+                $error_message .= ': ' . $response_data['error']['message'];
+            }
+            return new WP_Error('chatgpt_api_error', $error_message);
+        }
+
+        if (!isset($response_data['choices'][0]['message']['content'])) {
+            return new WP_Error('chatgpt_no_content', 'ChatGPT did not return summary content.');
+        }
+
+        return $this->format_summary($response_data['choices'][0]['message']['content']);
+    }
+
+    private function format_summary($raw_summary) {
+        // Clean up the summary and format as HTML
+        $summary = trim($raw_summary);
+        
+        // Convert to lines and create bullet points
+        $lines = array_filter(array_map('trim', preg_split('/\r?\n/', $summary)));
+        
+        if (empty($lines)) {
+            return '<p>No takeaways could be generated.</p>';
+        }
+
+        $formatted = '<ul class="takeaways-list">';
+        
+        foreach ($lines as $line) {
+            // Skip empty lines and headers
+            if (empty($line) || preg_match('/^(takeaways?|key points?|summary):?$/i', $line)) {
+                continue;
+            }
+            
+            // Remove bullet points if they already exist
+            $line = preg_replace('/^[-•*]\s*/', '', $line);
+            $line = preg_replace('/^\d+\.\s*/', '', $line);
+            
+            if (!empty($line)) {
+                $formatted .= '<li>' . esc_html($line) . '</li>';
+            }
+        }
+        
+        $formatted .= '</ul>';
+        
+        return $formatted;
     }
 
     private function clean_text_for_tts($text) {
@@ -262,7 +473,11 @@ class AIVoice_Public {
         $final_fileurl = $upload_dir['url'] . '/' . $final_filename;
 
         if (!rename($audio_file_path, $final_filepath)) {
-            return new WP_Error('file_move_failed', 'Failed to move audio file.');
+            // If rename fails, try copy and delete
+            if (!copy($audio_file_path, $final_filepath)) {
+                 return new WP_Error('file_move_failed', 'Failed to move/copy audio file.');
+            }
+            unlink($audio_file_path);
         }
 
         // Create WordPress attachment
@@ -290,28 +505,30 @@ class AIVoice_Public {
 
     private function merge_audio_files($post_id, $audio_files, $content_hash) {
         $upload_dir = wp_upload_dir();
-        $final_filename = 'ai-voice-' . $post_id . '-' . substr($content_hash, 0, 8) . '.mp3';
-        $final_filepath = $upload_dir['path'] . '/' . $final_filename;
-        $final_fileurl = $upload_dir['url'] . '/' . $final_filename;
+        
+        // Create a temporary file for merging
+        $temp_merged_file = wp_tempnam('ai-voice-merged-');
+        $file_handle = fopen($temp_merged_file, 'wb');
 
-        // Simple concatenation for MP3 files
-        $final_audio_content = '';
+        if (!$file_handle) {
+            return new WP_Error('merge_failed', 'Could not open temporary file for merging.');
+        }
+
         foreach ($audio_files as $file_path) {
             if (file_exists($file_path)) {
-                $final_audio_content .= file_get_contents($file_path);
+                $chunk_content = file_get_contents($file_path);
+                fwrite($file_handle, $chunk_content);
                 unlink($file_path);
             }
         }
+        fclose($file_handle);
         
-        if (empty($final_audio_content)) {
+        if (filesize($temp_merged_file) === 0) {
+            unlink($temp_merged_file);
             return new WP_Error('merge_failed', 'No audio content to merge.');
         }
 
-        if (file_put_contents($final_filepath, $final_audio_content) === false) {
-            return new WP_Error('file_write_failed', 'Failed to write merged audio file.');
-        }
-
-        return $this->save_audio_file($post_id, $final_filepath, $content_hash);
+        return $this->save_audio_file($post_id, $temp_merged_file, $content_hash);
     }
     
     private function generate_audio_for_chunk($post_id, $text_chunk) {
@@ -495,6 +712,8 @@ class AIVoice_Public {
         $text_dark = $this->settings['text_color_dark'] ?? '#f1f5f9';
         $accent_light = $this->settings['accent_color_light'] ?? '#3b82f6';
         $accent_dark = $this->settings['accent_color_dark'] ?? '#60a5fa';
+        $summary_light = $this->settings['summary_color_light'] ?? '#6b7280';
+        $summary_dark = $this->settings['summary_color_dark'] ?? '#9ca3af';
 
         // Generate secondary colors (lighter versions for backgrounds)
         $bg_secondary_light = $this->lighten_color($bg_light, 0.04);
@@ -516,6 +735,7 @@ class AIVoice_Public {
             --accent-light: {$accent_light};
             --accent-hover-light: {$accent_hover_light};
             --border-light: {$border_light};
+            --summary-light: {$summary_light};
             
             --bg-dark: {$bg_dark};
             --bg-secondary-dark: {$bg_secondary_dark};
@@ -524,6 +744,7 @@ class AIVoice_Public {
             --accent-dark: {$accent_dark};
             --accent-hover-dark: {$accent_hover_dark};
             --border-dark: {$border_dark};
+            --summary-dark: {$summary_dark};
         }";
 
         wp_add_inline_style('ai-voice-player-css', $custom_css);
@@ -565,3 +786,4 @@ class AIVoice_Public {
         return sprintf('#%02x%02x%02x', round($r), round($g), round($b));
     }
 }
+

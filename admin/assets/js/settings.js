@@ -1,19 +1,33 @@
 jQuery(document).ready(function ($) {
   function toggleSettings(serviceSelector, postbox) {
     const selectedService = $(serviceSelector).val();
-
     const context = postbox ? $(postbox) : $(serviceSelector).closest("form");
-
     context.find(".ai-voice-setting-row, .ai-voice-setting-row-postbox").hide();
     context.find(`[data-service="${selectedService}"]`).show();
   }
 
-  // For main settings page
+  function toggleSummarySettings(apiSelector) {
+    const selectedApi = $(apiSelector).val();
+    const context = $(apiSelector).closest("form");
+    context.find(".ai-voice-summary-row").hide();
+    context.find(`[data-api="${selectedApi}"]`).show();
+  }
+
+  // For main settings page - TTS services
   const serviceSelect = $("#ai_voice_default_ai_service");
   if (serviceSelect.length) {
     toggleSettings("#ai_voice_default_ai_service");
     serviceSelect.on("change", function () {
       toggleSettings(this);
+    });
+  }
+
+  // For main settings page - Summary API
+  const summaryApiSelect = $("#ai_voice_summary_api");
+  if (summaryApiSelect.length) {
+    toggleSummarySettings("#ai_voice_summary_api");
+    summaryApiSelect.on("change", function () {
+      toggleSummarySettings(this);
     });
   }
 

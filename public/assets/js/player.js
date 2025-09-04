@@ -4,6 +4,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- DOM ELEMENTS ---
   const playerContainer = wrapper.querySelector(".ai-voice-player-container");
+  const summaryBtn = wrapper.querySelector("#ai-voice-summary-btn");
+  const summaryIcon = wrapper.querySelector("#ai-voice-summary-icon");
+  const summaryCheck = wrapper.querySelector("#ai-voice-summary-check");
+  const summaryLoader = wrapper.querySelector("#ai-voice-summary-loader");
+  const summarySection = wrapper.querySelector("#ai-voice-summary-section");
+  const summaryContent = wrapper.querySelector("#ai-voice-summary-content");
+  const summaryClose = wrapper.querySelector("#ai-voice-summary-close");
   const playPauseBtn = wrapper.querySelector("#ai-voice-play-pause-btn");
   const playIcon = wrapper.querySelector("#ai-voice-play-icon");
   const pauseIcon = wrapper.querySelector("#ai-voice-pause-icon");
@@ -24,9 +31,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- AUDIO & STATE ---
   const audio = new Audio();
   let isGenerating = false;
+  let isGeneratingSummary = false;
   let currentTheme = aiVoiceData.theme || "light";
   let currentSpeed = 1.0;
   let generationAttempts = 0;
+  let summaryGenerated = false;
   const maxGenerationAttempts = 2;
 
   const voices = {
@@ -67,13 +76,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const percentage = audio.duration
       ? (audio.currentTime / audio.duration) * 100
       : 0;
+
+    // Get computed CSS variables from the actual element
+    const computedStyles = getComputedStyle(wrapper);
     const accentColor =
-      currentTheme === "light" ? "var(--accent-light)" : "var(--accent-dark)";
+      currentTheme === "light"
+        ? computedStyles.getPropertyValue("--accent-light").trim()
+        : computedStyles.getPropertyValue("--accent-dark").trim();
     const bgColor =
       currentTheme === "light"
-        ? "var(--bg-secondary-light)"
-        : "var(--bg-secondary-dark)";
-    progressBar.style.background = `linear-gradient(to right, ${accentColor} ${percentage}%, ${bgColor} ${percentage}%)`;
+        ? computedStyles.getPropertyValue("--bg-secondary-light").trim()
+        : computedStyles.getPropertyValue("--bg-secondary-dark").trim();
+
+    // Fallback colors if CSS variables aren't loaded
+    const fallbackAccent = currentTheme === "light" ? "#3b82f6" : "#60a5fa";
+    const fallbackBg = currentTheme === "light" ? "#f1f5f9" : "#334155";
+
+    const finalAccent = accentColor || fallbackAccent;
+    const finalBg = bgColor || fallbackBg;
+
+    progressBar.style.background = `linear-gradient(to right, ${finalAccent} ${percentage}%, ${finalBg} ${percentage}%)`;
   };
 
   const resetPlayerState = () => {
@@ -85,6 +107,21 @@ document.addEventListener("DOMContentLoaded", () => {
     generationAttempts = 0;
   };
 
+  const resetSummaryState = () => {
+    isGeneratingSummary = false;
+    summaryBtn.disabled = false;
+    summaryLoader.style.display = "none";
+    if (summaryGenerated) {
+      summaryIcon.style.display = "none";
+      summaryCheck.style.display = "block";
+      summaryBtn.classList.add("generated");
+    } else {
+      summaryIcon.style.display = "block";
+      summaryCheck.style.display = "none";
+      summaryBtn.classList.remove("generated");
+    }
+  };
+
   const showError = (message) => {
     articleTitleEl.textContent = "Error: " + message;
     articleTitleEl.style.color = "#ef4444";
@@ -92,8 +129,15 @@ document.addEventListener("DOMContentLoaded", () => {
     resetPlayerState();
   };
 
+  const showSummaryError = (message) => {
+    summaryContent.innerHTML =
+      '<p style="color: #ef4444;">Error: ' + message + "</p>";
+    console.error("AI Voice Summary Error:", message);
+    resetSummaryState();
+  };
+
   const clearError = () => {
-    articleTitleEl.textContent = aiVoiceData.title;
+    articleTitleEl.textContent = "Listen to the article";
     articleTitleEl.style.color = "";
   };
 
@@ -107,6 +151,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     clearError();
     audio.paused ? audio.play() : audio.pause();
+  };
+
+  const toggleSummary = () => {
+    if (isGeneratingSummary) return;
+
+    if (!summaryGenerated) {
+      generateSummary();
+    } else {
+      // Toggle summary section visibility
+      if (summarySection.style.display === "none") {
+        summarySection.style.display = "block";
+      } else {
+        summarySection.style.display = "none";
+      }
+    }
   };
 
   const getVisibleText = () => {
@@ -167,6 +226,74 @@ document.addEventListener("DOMContentLoaded", () => {
     return text;
   };
 
+  const generateSummary = () => {
+    if (isGeneratingSummary) return;
+
+    isGeneratingSummary = true;
+    summaryBtn.disabled = true;
+    summaryIcon.style.display = "none";
+    summaryLoader.style.display = "block";
+
+    const textToSummarize = getVisibleText();
+
+    if (!textToSummarize || textToSummarize.trim().length < 50) {
+      showSummaryError("Not enough text content found to summarize.");
+      return;
+    }
+
+    console.log(
+      "AI Voice: Generating summary for text length:",
+      textToSummarize.length,
+      "characters"
+    );
+
+    jQuery.ajax({
+      url: aiVoiceData.ajax_url,
+      type: "POST",
+      data: {
+        action: "ai_voice_generate_summary",
+        nonce: aiVoiceData.nonce,
+        post_id: aiVoiceData.post_id,
+        text_to_summarize: textToSummarize,
+      },
+      timeout: 60000, // 1 minute timeout
+      success: function (response) {
+        console.log("AI Voice: Summary response:", response);
+
+        if (response.success) {
+          summaryContent.innerHTML = response.data.summary;
+          summarySection.style.display = "block";
+          summaryGenerated = true;
+          resetSummaryState();
+        } else {
+          const errorMsg =
+            response.data?.message || "Summary generation failed.";
+          showSummaryError(errorMsg);
+        }
+      },
+      error: function (jqXHR, textStatus, errorThrown) {
+        console.error("AI Voice: Summary AJAX Error:", {
+          status: jqXHR.status,
+          textStatus,
+          errorThrown,
+          responseText: jqXHR.responseText?.substring(0, 500),
+        });
+
+        let errorMessage = "Summary request failed.";
+
+        if (textStatus === "timeout") {
+          errorMessage = "Summary request timed out. Please try again.";
+        } else if (jqXHR.status === 500) {
+          errorMessage = "Server error. Please check your API configuration.";
+        } else if (jqXHR.status === 0) {
+          errorMessage = "Network error. Check your internet connection.";
+        }
+
+        showSummaryError(errorMessage);
+      },
+    });
+  };
+
   const generateAudio = () => {
     if (isGenerating) return;
 
@@ -187,7 +314,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Show text length info for debugging
     console.log(
       "AI Voice: Processing text length:",
       textToSpeak.length,
@@ -203,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
         post_id: aiVoiceData.post_id,
         text_to_speak: textToSpeak,
       },
-      timeout: 180000, // Increased to 3 minutes
+      timeout: 180000, // 3 minutes timeout
       success: function (response) {
         console.log("AI Voice: Generation response:", response);
 
@@ -217,7 +343,7 @@ document.addEventListener("DOMContentLoaded", () => {
             resetPlayerState();
           });
 
-          generationAttempts = 0; // Reset on success
+          generationAttempts = 0;
         } else {
           const errorMsg = response.data?.message || "Generation failed.";
 
@@ -339,7 +465,6 @@ document.addEventListener("DOMContentLoaded", () => {
         audio.playbackRate = currentSpeed;
         speedBtn.textContent = `${s}x`;
         speedModal.style.display = "none";
-        // Update active state
         speedContainer
           .querySelectorAll("button")
           .forEach((b) => b.classList.remove("active"));
@@ -358,8 +483,6 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.className = index === 0 ? "active" : "";
       btn.textContent = voice.name;
       btn.onclick = () => {
-        // Note: Voice changing would require regenerating audio
-        // This is just UI demonstration
         voiceModal.style.display = "none";
       };
       voiceContainer.appendChild(btn);
@@ -367,7 +490,12 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // --- EVENT LISTENERS ---
+  summaryBtn.addEventListener("click", toggleSummary);
   playPauseBtn.addEventListener("click", togglePlayPause);
+
+  summaryClose.addEventListener("click", () => {
+    summarySection.style.display = "none";
+  });
 
   audio.addEventListener("play", () => {
     playIcon.style.display = "none";
@@ -401,7 +529,7 @@ document.addEventListener("DOMContentLoaded", () => {
   audio.addEventListener("error", (e) => {
     console.error("AI Voice: Audio error:", e);
     showError("Audio playback failed. Please try regenerating.");
-    audio.src = ""; // Clear the source to allow regeneration
+    audio.src = "";
   });
 
   audio.addEventListener("loadstart", () => {
@@ -449,11 +577,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- INITIALIZATION ---
   updateTheme(currentTheme);
   updateAILogo();
-  articleTitleEl.textContent = aiVoiceData.title;
+  articleTitleEl.textContent = "Listen to the article";
   updateProgressBarUI();
 
   // Set initial playback rate
   audio.playbackRate = currentSpeed;
 
-  console.log("AI Voice Player initialized successfully");
+  console.log("AI Voice Player with Summary initialized successfully");
 });
