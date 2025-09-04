@@ -674,3 +674,22 @@
     padding: 0.75rem;
   }
 }
+
+#ai-voice-player-wrapper .summary-content .takeaways-list li {
+  font-size: 0.95rem; /* Increased from inheriting smaller size */
+}
+
+/* Change OpenAI SVG color to #0096ff */
+#ai-voice-player-wrapper .summary-icon-svg {
+  filter: brightness(0) saturate(100%) invert(27%) sepia(97%) saturate(3180%)
+    hue-rotate(201deg) brightness(101%) contrast(101%) !important;
+}
+
+/* Ensure the color applies when button is in generated state */
+#ai-voice-player-wrapper .summary-button.generated .summary-icon-svg {
+  filter: brightness(0) saturate(100%) !important;
+}
+
+#ai-voice-player-wrapper .summary-title {
+  font-size: 1.1rem !important;
+}
