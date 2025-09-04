@@ -272,37 +272,47 @@ class AIVoice_Public {
     }
 
     private function format_summary($raw_summary) {
-        // Clean up the summary and format as HTML
-        $summary = trim($raw_summary);
-        
-        // Convert to lines and create bullet points
-        $lines = array_filter(array_map('trim', preg_split('/\r?\n/', $summary)));
-        
-        if (empty($lines)) {
-            return '<p>No takeaways could be generated.</p>';
-        }
-
-        $formatted = '<ul class="takeaways-list">';
-        
-        foreach ($lines as $line) {
-            // Skip empty lines and headers
-            if (empty($line) || preg_match('/^(takeaways?|key points?|summary):?$/i', $line)) {
-                continue;
-            }
-            
-            // Remove bullet points if they already exist
-            $line = preg_replace('/^[-•*]\s*/', '', $line);
-            $line = preg_replace('/^\d+\.\s*/', '', $line);
-            
-            if (!empty($line)) {
-                $formatted .= '<li>' . esc_html($line) . '</li>';
-            }
-        }
-        
-        $formatted .= '</ul>';
-        
-        return $formatted;
+    // Clean up the summary and format as HTML
+    $summary = trim($raw_summary);
+    
+    // Convert to lines and create bullet points
+    $lines = array_filter(array_map('trim', preg_split('/\r?\n/', $summary)));
+    
+    if (empty($lines)) {
+        return '<p>No takeaways could be generated.</p>';
     }
+
+    $formatted = '<ul class="takeaways-list">';
+    
+    foreach ($lines as $line) {
+        // Skip empty lines, headers, and introductory phrases
+        if (empty($line) || 
+            preg_match('/^(here are|key takeaways?|takeaways?|summary|main points?):?$/i', $line) ||
+            preg_match('/^here are the key takeaways from/i', $line) ||
+            preg_match('/^Key Takeaways:/i', $line) ||
+            preg_match('/^based on the article/i', $line)) {
+            continue;
+        }
+        
+        // Remove bullet points if they already exist
+        $line = preg_replace('/^[-•*]\s*/', '', $line);
+        $line = preg_replace('/^\d+\.\s*/', '', $line);
+        
+        // Skip very short lines (likely fragments)
+        if (!empty($line) && strlen($line) > 10) {
+            $formatted .= '<li>' . esc_html($line) . '</li>';
+        }
+    }
+    
+    $formatted .= '</ul>';
+    
+    // If no valid takeaways found, return error message
+    if ($formatted === '<ul class="takeaways-list"></ul>') {
+        return '<p>No valid takeaways could be extracted.</p>';
+    }
+    
+    return $formatted;
+}
 
     private function clean_text_for_tts($text) {
         // Remove excessive whitespace
