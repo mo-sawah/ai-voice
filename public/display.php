@@ -24,11 +24,22 @@ class AIVoice_Public {
     }
 
     public function maybe_display_player( $content ) {
-        if ( ! is_singular( ['post', 'page'] ) || ! in_the_loop() || ! is_main_query() ) {
+        // Only show on single posts, not pages, homepage, archives, etc.
+        if ( ! is_single() || ! in_the_loop() || ! is_main_query() ) {
             return $content;
         }
 
+        // Double-check we're not on homepage or archive pages
+        if ( is_home() || is_front_page() || is_archive() || is_category() || is_tag() || is_search() ) {
+            return $content;
+        }
+
+        // Make sure we have a valid post
         $post_id = get_the_ID();
+        if ( ! $post_id || get_post_type($post_id) !== 'post' ) {
+            return $content;
+        }
+
         $status = get_post_meta($post_id, '_ai_voice_status', true);
         
         $is_enabled_globally = isset($this->settings['enable_globally']) && $this->settings['enable_globally'] == '1';
