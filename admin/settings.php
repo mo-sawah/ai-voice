@@ -260,6 +260,13 @@ class AIVoice_Settings {
 
                 <?php submit_button(); ?>
             </form>
+
+            <?php
+            // ADD THE PURGE BOX RIGHT HERE, below the settings form
+            if ( function_exists( 'ai_voice_render_purge_box' ) ) {
+                ai_voice_render_purge_box();
+            }
+            ?>
         </div>
         <?php
     }
