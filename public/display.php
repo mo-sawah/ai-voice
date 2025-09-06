@@ -13,7 +13,7 @@ class AIVoice_Public {
     public function __construct() {
         $this->settings = get_option('ai_voice_settings');
         add_filter( 'the_content', [ $this, 'maybe_display_player' ], 99 );
-        add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+        add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ], 1 );
 
         // Audio generation
         add_action( 'wp_ajax_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
@@ -29,8 +29,22 @@ class AIVoice_Public {
     }
 
     public function enqueue_assets() {
-        wp_register_style( 'ai-voice-player-css', AI_VOICE_PLUGIN_URL . 'public/assets/css/player.css', [], AI_VOICE_VERSION );
-        wp_register_script( 'ai-voice-player-js', AI_VOICE_PLUGIN_URL . 'public/assets/js/player.js', ['jquery'], AI_VOICE_VERSION, true );
+        // Enqueue CSS in head (not just register)
+        wp_enqueue_style(
+            'ai-voice-player-css',
+            AI_VOICE_PLUGIN_URL . 'public/assets/css/player.css',
+            [],
+            AI_VOICE_VERSION
+        );
+
+        // Register JS (we’ll enqueue it later only on pages with the player)
+        wp_register_script(
+            'ai-voice-player-js',
+            AI_VOICE_PLUGIN_URL . 'public/assets/js/player.js',
+            ['jquery'],
+            AI_VOICE_VERSION,
+            true
+        );
     }
 
     public function maybe_display_player( $content ) {
@@ -639,8 +653,11 @@ class AIVoice_Public {
     }
 
     private function prepare_frontend_scripts($post_id) {
-        wp_enqueue_style('ai-voice-player-css');
+        // We keep this: script gets enqueued only where needed; CSS is already in head.
         wp_enqueue_script('ai-voice-player-js');
+
+        // Inject colors as before (these load as inline <style> tied to the CSS handle)
+        $this->inject_custom_colors();
 
         $theme = get_post_meta($post_id, '_ai_voice_theme', true) ?: ($this->settings['theme'] ?? 'light');
         if ($theme === 'default') $theme = $this->settings['theme'] ?? 'light';
@@ -648,15 +665,13 @@ class AIVoice_Public {
         $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
         if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
 
-        $this->inject_custom_colors();
-
         wp_localize_script('ai-voice-player-js', 'aiVoiceData', [
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce'    => wp_create_nonce('ai_voice_nonce'),
-            'post_id'  => $post_id,
-            'title'    => get_the_title($post_id),
-            'theme'    => esc_attr($theme),
-            'aiService'=> esc_attr($ai_service),
+            'ajax_url'  => admin_url('admin-ajax.php'),
+            'nonce'     => wp_create_nonce('ai_voice_nonce'),
+            'post_id'   => $post_id,
+            'title'     => get_the_title($post_id),
+            'theme'     => esc_attr($theme),
+            'aiService' => esc_attr($ai_service),
         ]);
     }
 
