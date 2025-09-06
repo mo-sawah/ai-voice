@@ -693,23 +693,3 @@
 #ai-voice-player-wrapper .summary-title {
   font-size: 1.1rem !important;
 }
-
-/* Add these rules near the end of the file */
-
-/* Center the loader inside the summary button so it doesn't shift layout */
-#ai-voice-player-wrapper .summary-button {
-  position: relative; /* already set above, keeping for clarity */
-}
-#ai-voice-player-wrapper .summary-button .loader {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Once generated, always hide the loader even if some JS race left it visible */
-#ai-voice-player-wrapper .summary-button.generated .loader {
-  display: none !important;
-}
