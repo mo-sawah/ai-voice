@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBar.style.background = `linear-gradient(to right, ${finalAccent} ${percentage}%, ${finalBg} ${percentage}%)`;
   };
 
-  // Single definitions (no duplicates)
+  // UI state setters (single definitions)
   const updateTheme = (theme) => {
     currentTheme = theme;
     playerContainer.dataset.theme = theme;
@@ -128,37 +128,23 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (service === "openai") {
       aiLogoContainer.innerHTML = `
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22.282 9.821c-.29-2.737-2.2-4.648-4.937-4.937a5.85 5.85 0 0 0-4.546 1.567 5.85 5.85 0 0 0-4.546-1.567c-2.737.289-4.647 2.2-4.937 4.937a5.85 5.85 0 0 0 1.567 4.546 5.85 5.85 0 0 0 1.567 4.546c.29 2.737 2.2 4.647 4.937 4.937a5.85 5.85 0 0 0 4.546-1.567 5.85 5.85 0 0 0 4.546 1.567c2.737-.29 4.647-2.2 4.937-4.937a5.85 5.85 0 0 0 1.567-4.546 5.85 5.85 0 0 0 1.567-4.546zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
+          <path d="M22.282 9.821c-.29-2.737-2.2-4.648-4.937-4.937a5.85 5.85 0 0 0-4.546 1.567 5.85 5.85 0 0 0-4.546-1.567c-2.737.289-4.647 2.2-4.937 4.937a5.85 5.85 0 0 0 1.567 4.546 5.85 5.85 0 0 0 1.567 4.546c.29 2.737 2.2 4.647 4.937 4.937a5.85 5.85 0 0 0 4.546-1.567 5.85 5.85 0 0 0 4.546 1.567c2.737-.29 4.647-2.2 4.937-4.937a5.85 5.85 0 0 0-1.567-4.546 5.85 5.85 0 0 0 1.567-4.546zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
         </svg>
         <span>Voiced by OpenAI</span>`;
     }
   };
 
-  // Content extraction (client-side used only for UI; server now extracts text for generation)
-  const findContentNode = () => {
-    const selectors = [
-      "article .entry-content",
-      ".single .entry-content",
-      ".post .entry-content",
-      ".post-content",
-      ".single-content",
-      ".article-content",
-      ".the-content",
-      "main .entry-content",
-      "main .content",
-      "article",
-      ".post",
-      "main",
-      "#content",
-    ];
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el && (el.innerText || "").trim().length > 200) return el;
-    }
-    return (
-      wrapper.closest("article, .post, .entry-content, main, .content") ||
-      wrapper.parentElement
-    );
+  // Robust helper to finalize Summary UI
+  const setSummaryGeneratedUI = () => {
+    summaryGenerated = true;
+    isGeneratingSummary = false;
+    summaryBtn.disabled = false;
+
+    // Force-hide the loader and show the check
+    summaryLoader.style.display = "none";
+    summaryIcon.style.display = "none";
+    summaryCheck.style.display = "block";
+    summaryBtn.classList.add("generated");
   };
 
   // UI helpers
@@ -166,19 +152,23 @@ document.addEventListener("DOMContentLoaded", () => {
     articleTitleEl.textContent = "Listen to the article";
     articleTitleEl.style.color = "";
   };
-
   const showError = (message) => {
     articleTitleEl.textContent = "Error: " + message;
     articleTitleEl.style.color = "#ef4444";
     console.error("AI Voice Error:", message);
     resetPlayerState();
   };
-
   const showSummaryError = (message) => {
     summaryContent.innerHTML =
       '<p style="color: #ef4444;">Error: ' + message + "</p>";
     console.error("AI Voice Summary Error:", message);
-    resetSummaryState();
+    // Also make sure loader is hidden
+    summaryLoader.style.display = "none";
+    isGeneratingSummary = false;
+    summaryBtn.disabled = false;
+    summaryIcon.style.display = "block";
+    summaryCheck.style.display = "none";
+    summaryBtn.classList.remove("generated");
   };
 
   // Actions
@@ -194,22 +184,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const toggleSummary = () => {
     if (isGeneratingSummary) return;
+
     if (!summaryGenerated) {
       generateSummary();
     } else {
+      // Toggle visibility and ensure spinner is off
       summarySection.style.display =
         summarySection.style.display === "none" ? "block" : "none";
+      summaryLoader.style.display = "none";
     }
   };
 
   const generateSummary = () => {
     if (isGeneratingSummary) return;
+
     isGeneratingSummary = true;
     summaryBtn.disabled = true;
     summaryIcon.style.display = "none";
     summaryLoader.style.display = "block";
 
-    // Server extracts the full content
+    // Server extracts full post content
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -223,8 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (response.success) {
           summaryContent.innerHTML = response.data.summary;
           summarySection.style.display = "block";
-          summaryGenerated = true;
-          resetSummaryState();
+          setSummaryGeneratedUI(); // <- ensure spinner off + check shown
         } else {
           const errorMsg =
             response.data?.message || "Summary generation failed.";
@@ -255,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
     articleTitleEl.textContent = "Generating audio...";
     articleTitleEl.style.color = "";
 
-    // Server extracts the full content
+    // Server extracts full post content
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -314,6 +307,16 @@ document.addEventListener("DOMContentLoaded", () => {
         showError(errorMessage);
       },
     });
+  };
+
+  // Reset helpers
+  const resetPlayerState = () => {
+    isGenerating = false;
+    playPauseBtn.disabled = false;
+    loader.style.display = "none";
+    playIcon.style.display = "block";
+    pauseIcon.style.display = "none";
+    generationAttempts = 0;
   };
 
   // Events
