@@ -1,7 +1,7 @@
 <?php
 // If this file is called directly, abort.
 if ( ! defined( 'WPINC' ) ) {
-	die;
+    die;
 }
 
 class AIVoice_Public {
@@ -16,7 +16,12 @@ class AIVoice_Public {
         add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_assets' ] );
         add_action( 'wp_ajax_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_audio', [ $this, 'handle_generate_audio_ajax' ] );
-        // AJAX handler for summary generation
+
+        // Stream endpoint to serve MP3 via PHP (fixes 412 and partial playback on shared hosts)
+        add_action( 'wp_ajax_ai_voice_stream_audio', [ $this, 'handle_stream_audio_ajax' ] );
+        add_action( 'wp_ajax_nopriv_ai_voice_stream_audio', [ $this, 'handle_stream_audio_ajax' ] );
+
+        // Summary
         add_action( 'wp_ajax_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
     }
@@ -27,26 +32,20 @@ class AIVoice_Public {
     }
 
     public function maybe_display_player( $content ) {
-        // Only show on single posts, not pages, homepage, archives, etc.
         if ( ! is_single() || ! in_the_loop() || ! is_main_query() ) {
             return $content;
         }
-
-        // Double-check we're not on homepage or archive pages
         if ( is_home() || is_front_page() || is_archive() || is_category() || is_tag() || is_search() ) {
             return $content;
         }
 
-        // Make sure we have a valid post
         $post_id = get_the_ID();
         if ( ! $post_id || get_post_type($post_id) !== 'post' ) {
             return $content;
         }
 
         $status = get_post_meta($post_id, '_ai_voice_status', true);
-        
         $is_enabled_globally = isset($this->settings['enable_globally']) && $this->settings['enable_globally'] == '1';
-
         if ($status === 'disabled' || ($status !== 'enabled' && !$is_enabled_globally)) {
             return $content;
         }
@@ -73,27 +72,45 @@ class AIVoice_Public {
             wp_send_json_error(['message' => 'No visible text content was found to read.']);
         }
 
-        // Limit text length to prevent timeouts
+        // Remove dateline like "(CITY – Date) – "
+        $text_to_speak = $this->strip_leading_parenthetical_dateline($text_to_speak);
+
+        // Limit and clean
         if (strlen($text_to_speak) > $this->max_total_chars) {
             $text_to_speak = substr($text_to_speak, 0, $this->max_total_chars) . '...';
         }
-
-        // Clean up text for better processing
         $text_to_speak = $this->clean_text_for_tts($text_to_speak);
 
+        // Method and AI service
         $generation_method = get_post_meta($post_id, '_ai_voice_generation_method', true);
         if (empty($generation_method) || $generation_method === 'default') {
             $generation_method = $this->settings['generation_method'] ?? 'chunked';
         }
+        $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
+        if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
 
-        // Force chunked method for better reliability
-        $generation_result = $this->generate_chunked_audio($post_id, $text_to_speak);
+        // Generate
+        if ($ai_service === 'openai' || $generation_method === 'single') {
+            $generation_result = $this->generate_single_request_audio($post_id, $text_to_speak);
+        } else {
+            $generation_result = $this->generate_chunked_audio($post_id, $text_to_speak);
+        }
 
         if (is_wp_error($generation_result)) {
             wp_send_json_error(['message' => $generation_result->get_error_message()]);
-        } else {
-            wp_send_json_success(['audioUrl' => $generation_result]);
         }
+
+        // Build a stream URL (serve via admin-ajax to avoid 412 on static files)
+        $content_hash = md5($text_to_speak);
+        $stream_url = $this->build_stream_url($post_id, $content_hash);
+
+        // Optional: expose direct URL for debugging if needed
+        $direct_url = get_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, true);
+
+        wp_send_json_success([
+            'audioUrl' => $stream_url,
+            'directUrl' => $direct_url, // optional; not used by the player
+        ]);
     }
 
     public function handle_generate_summary_ajax() {
@@ -109,7 +126,9 @@ class AIVoice_Public {
             wp_send_json_error(['message' => 'No text content found to summarize.']);
         }
 
-        // Check for cached summary
+        $text_to_summarize = $this->strip_leading_parenthetical_dateline($text_to_summarize);
+
+        // Cache by processed text
         $content_hash = md5($text_to_summarize);
         $cached_summary = get_post_meta($post_id, '_ai_voice_summary_' . $content_hash, true);
         if (!empty($cached_summary)) {
@@ -117,37 +136,159 @@ class AIVoice_Public {
             return;
         }
 
-        // Generate new summary
         $summary_result = $this->generate_summary($post_id, $text_to_summarize);
 
         if (is_wp_error($summary_result)) {
             wp_send_json_error(['message' => $summary_result->get_error_message()]);
         } else {
-            // Cache the summary
             update_post_meta($post_id, '_ai_voice_summary_' . $content_hash, $summary_result);
             wp_send_json_success(['summary' => $summary_result]);
         }
     }
 
+    // STREAM ENDPOINT: serves MP3 via PHP with proper Range support
+    public function handle_stream_audio_ajax() {
+        // No standard nonce field in GET forms, so read from query
+        $post_id = isset($_GET['post_id']) ? intval($_GET['post_id']) : 0;
+        $hash    = isset($_GET['hash']) ? sanitize_text_field($_GET['hash']) : '';
+        $nonce   = isset($_GET['nonce']) ? sanitize_text_field($_GET['nonce']) : '';
+
+        if (!$post_id || empty($hash) || !wp_verify_nonce($nonce, "ai_voice_stream_{$post_id}_{$hash}")) {
+            status_header(403);
+            exit('Forbidden');
+        }
+
+        // Locate stored MP3 URL and map to disk
+        $stored_url = get_post_meta($post_id, '_ai_voice_audio_url_' . $hash, true);
+        if (empty($stored_url)) {
+            status_header(404);
+            exit('Not Found');
+        }
+
+        $upload_dir = wp_upload_dir();
+        $file_path  = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $stored_url);
+
+        if (!file_exists($file_path) || !is_readable($file_path)) {
+            status_header(404);
+            exit('Not Found');
+        }
+
+        // Send headers
+        $filesize   = filesize($file_path);
+        $lastmod_unix = filemtime($file_path);
+        $lastmod    = gmdate('D, d M Y H:i:s', $lastmod_unix) . ' GMT';
+        $etag       = '"' . md5($file_path . '|' . $filesize . '|' . $lastmod_unix) . '"';
+
+        // Handle If-None-Match / If-Modified-Since quickly
+        if ((isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) ||
+            (isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) && trim($_SERVER['HTTP_IF_MODIFIED_SINCE']) === $lastmod)) {
+            header('HTTP/1.1 304 Not Modified');
+            header('ETag: ' . $etag);
+            header('Last-Modified: ' . $lastmod);
+            exit;
+        }
+
+        // Common headers
+        header('Content-Type: audio/mpeg');
+        header('Content-Disposition: inline; filename="' . basename($file_path) . '"');
+        header('Accept-Ranges: bytes');
+        header('Cache-Control: public, max-age=31536000, immutable');
+        header('ETag: ' . $etag);
+        header('Last-Modified: ' . $lastmod);
+
+        // HEAD support
+        if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+            header('Content-Length: ' . $filesize);
+            exit;
+        }
+
+        $range = null;
+        if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d*)-(\d*)/i', $_SERVER['HTTP_RANGE'], $m)) {
+            $start = ($m[1] !== '') ? intval($m[1]) : 0;
+            $end   = ($m[2] !== '') ? intval($m[2]) : ($filesize - 1);
+            if ($start > $end || $end >= $filesize) {
+                header('HTTP/1.1 416 Range Not Satisfiable');
+                header('Content-Range: bytes */' . $filesize);
+                exit;
+            }
+            $range = [$start, $end];
+        }
+
+        // Clean existing buffers
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) { @ob_end_clean(); }
+        }
+
+        // Serve range or full
+        $chunk_size = 8192;
+        $fp = fopen($file_path, 'rb');
+        if (!$fp) {
+            status_header(500);
+            exit('Cannot open file');
+        }
+        @set_time_limit(0);
+        ignore_user_abort(true);
+
+        if ($range) {
+            list($start, $end) = $range;
+            $length = $end - $start + 1;
+
+            header('HTTP/1.1 206 Partial Content');
+            header("Content-Length: $length");
+            header("Content-Range: bytes $start-$end/$filesize");
+
+            fseek($fp, $start);
+            $bytes_left = $length;
+            while ($bytes_left > 0 && !feof($fp)) {
+                $read = ($bytes_left > $chunk_size) ? $chunk_size : $bytes_left;
+                $buffer = fread($fp, $read);
+                echo $buffer;
+                flush();
+                $bytes_left -= strlen($buffer);
+            }
+        } else {
+            header('Content-Length: ' . $filesize);
+            while (!feof($fp)) {
+                $buffer = fread($fp, $chunk_size);
+                echo $buffer;
+                flush();
+            }
+        }
+
+        fclose($fp);
+        exit;
+    }
+
+    private function build_stream_url($post_id, $content_hash) {
+        $nonce = wp_create_nonce("ai_voice_stream_{$post_id}_{$content_hash}");
+        $url   = admin_url('admin-ajax.php');
+        $args  = [
+            'action' => 'ai_voice_stream_audio',
+            'post_id' => $post_id,
+            'hash' => $content_hash,
+            'nonce' => $nonce,
+            // bust any intermediary caches aggressively
+            'nc' => wp_generate_password(6, false, false),
+        ];
+        return add_query_arg($args, $url);
+    }
+
     private function generate_summary($post_id, $text_to_summarize) {
-        // Get summary settings
         $summary_api = $this->settings['summary_api'] ?? 'openrouter';
         $summary_model = $this->settings['summary_model'] ?? 'anthropic/claude-3-haiku';
         $summary_prompt = $this->settings['summary_prompt'] ?? 'Create 3-5 key takeaways from this article. Each takeaway should be 1-2 lines maximum. Focus on the most important insights and actionable information.';
 
-        // Clean and limit text length for summary (longer than TTS)
         if (strlen($text_to_summarize) > 15000) {
             $text_to_summarize = substr($text_to_summarize, 0, 15000) . '...';
         }
-
         $text_to_summarize = $this->clean_text_for_tts($text_to_summarize);
 
         if ($summary_api === 'openrouter') {
             return $this->generate_openrouter_summary($text_to_summarize, $summary_model, $summary_prompt);
         } else if ($summary_api === 'chatgpt') {
-            return $this->generate_chatgpt_summary($text_to_summarize, $summary_model, $summary_prompt);
+            $model = $this->settings['chatgpt_model'] ?? 'gpt-3.5-turbo';
+            return $this->generate_chatgpt_summary($text_to_summarize, $model, $summary_prompt);
         }
-
         return new WP_Error('invalid_api', 'Invalid summary API selected.');
     }
 
@@ -158,38 +299,26 @@ class AIVoice_Public {
         }
 
         $api_url = 'https://openrouter.ai/api/v1/chat/completions';
-        
         $messages = [
-            [
-                'role' => 'system',
-                'content' => $prompt
-            ],
-            [
-                'role' => 'user', 
-                'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text
-            ]
+            ['role' => 'system', 'content' => $prompt],
+            ['role' => 'user', 'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text]
         ];
 
-        $body = [
-            'model' => $model,
-            'messages' => $messages,
-            'max_tokens' => 500,
-            'temperature' => 0.3
-        ];
+        $body = ['model' => $model, 'messages' => $messages, 'max_tokens' => 500, 'temperature' => 0.3];
 
         $args = [
-            'timeout' => 30,
+            'timeout' => 60,
             'headers' => [
                 'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'HTTP-Referer' => home_url(),
-                'X-Title' => get_bloginfo('name')
+                'Content-Type'  => 'application/json',
+                'HTTP-Referer'  => home_url(),
+                'Referer'       => home_url(),
+                'X-Title'       => get_bloginfo('name')
             ],
             'body' => json_encode($body)
         ];
 
         $response = wp_remote_post($api_url, $args);
-
         if (is_wp_error($response)) {
             return new WP_Error('openrouter_request_failed', 'OpenRouter request failed: ' . $response->get_error_message());
         }
@@ -208,7 +337,6 @@ class AIVoice_Public {
         if (!isset($response_data['choices'][0]['message']['content'])) {
             return new WP_Error('openrouter_no_content', 'OpenRouter did not return summary content.');
         }
-
         return $this->format_summary($response_data['choices'][0]['message']['content']);
     }
 
@@ -219,36 +347,20 @@ class AIVoice_Public {
         }
 
         $api_url = 'https://api.openai.com/v1/chat/completions';
-        
         $messages = [
-            [
-                'role' => 'system',
-                'content' => $prompt
-            ],
-            [
-                'role' => 'user',
-                'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text
-            ]
+            ['role' => 'system', 'content' => $prompt],
+            ['role' => 'user',   'content' => "Please analyze this article and provide the key takeaways:\n\n" . $text]
         ];
 
-        $body = [
-            'model' => $model,
-            'messages' => $messages,
-            'max_tokens' => 500,
-            'temperature' => 0.3
-        ];
+        $body = ['model' => $model, 'messages' => $messages, 'max_tokens' => 500, 'temperature' => 0.3];
 
         $args = [
-            'timeout' => 30,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json'
-            ],
+            'timeout' => 45,
+            'headers' => ['Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'],
             'body' => json_encode($body)
         ];
 
         $response = wp_remote_post($api_url, $args);
-
         if (is_wp_error($response)) {
             return new WP_Error('chatgpt_request_failed', 'ChatGPT request failed: ' . $response->get_error_message());
         }
@@ -267,71 +379,62 @@ class AIVoice_Public {
         if (!isset($response_data['choices'][0]['message']['content'])) {
             return new WP_Error('chatgpt_no_content', 'ChatGPT did not return summary content.');
         }
-
         return $this->format_summary($response_data['choices'][0]['message']['content']);
     }
 
     private function format_summary($raw_summary) {
-    // Clean up the summary and format as HTML
-    $summary = trim($raw_summary);
-    
-    // Convert to lines and create bullet points
-    $lines = array_filter(array_map('trim', preg_split('/\r?\n/', $summary)));
-    
-    if (empty($lines)) {
-        return '<p>No takeaways could be generated.</p>';
+        $summary = trim($raw_summary);
+        $lines = array_filter(array_map('trim', preg_split('/\r?\n/', $summary)));
+        if (empty($lines)) {
+            return '<p>No takeaways could be generated.</p>';
+        }
+
+        $formatted = '<ul class="takeaways-list">';
+        foreach ($lines as $line) {
+            if (empty($line) || 
+                preg_match('/^(here are|key takeaways?|takeaways?|summary|main points?):?$/i', $line) ||
+                preg_match('/^here are the key takeaways from/i', $line) ||
+                preg_match('/^Key Takeaways:/i', $line) ||
+                preg_match('/^based on the article/i', $line)) {
+                continue;
+            }
+            $line = preg_replace('/^[-•*]\s*/', '', $line);
+            $line = preg_replace('/^\d+\.\s*/', '', $line);
+            if (!empty($line) && strlen($line) > 10) {
+                $formatted .= '<li>' . esc_html($line) . '</li>';
+            }
+        }
+        $formatted .= '</ul>';
+
+        if ($formatted === '<ul class="takeaways-list"></ul>') {
+            return '<p>No valid takeaways could be extracted.</p>';
+        }
+        return $formatted;
     }
 
-    $formatted = '<ul class="takeaways-list">';
-    
-    foreach ($lines as $line) {
-        // Skip empty lines, headers, and introductory phrases
-        if (empty($line) || 
-            preg_match('/^(here are|key takeaways?|takeaways?|summary|main points?):?$/i', $line) ||
-            preg_match('/^here are the key takeaways from/i', $line) ||
-            preg_match('/^Key Takeaways:/i', $line) ||
-            preg_match('/^based on the article/i', $line)) {
-            continue;
+    // Remove leading parenthetical datelines like: "(CITY – Month 1, 2025) – "
+    private function strip_leading_parenthetical_dateline($text) {
+        $text = ltrim($text);
+        for ($i = 0; $i < 2; $i++) {
+            if (preg_match('/^\(([^)]{1,120})\)\s*(?:[-–—]\s*)?/u', $text, $m)) {
+                if (preg_match('/\b(19|20)\d{2}\b|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday\b/i', $m[1])) {
+                    $text = ltrim(substr($text, strlen($m[0])));
+                    continue;
+                }
+            }
+            break;
         }
-        
-        // Remove bullet points if they already exist
-        $line = preg_replace('/^[-•*]\s*/', '', $line);
-        $line = preg_replace('/^\d+\.\s*/', '', $line);
-        
-        // Skip very short lines (likely fragments)
-        if (!empty($line) && strlen($line) > 10) {
-            $formatted .= '<li>' . esc_html($line) . '</li>';
-        }
+        return $text;
     }
-    
-    $formatted .= '</ul>';
-    
-    // If no valid takeaways found, return error message
-    if ($formatted === '<ul class="takeaways-list"></ul>') {
-        return '<p>No valid takeaways could be extracted.</p>';
-    }
-    
-    return $formatted;
-}
 
     private function clean_text_for_tts($text) {
-        // Remove excessive whitespace
+        $text = str_replace(['•', '–', '—'], ['-', '-', '-'], $text);
         $text = preg_replace('/\s+/', ' ', $text);
-        
-        // Remove URLs
         $text = preg_replace('/https?:\/\/[^\s]+/', '', $text);
-        
-        // Remove email addresses
         $text = preg_replace('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', '', $text);
-        
-        // Remove excessive punctuation
         $text = preg_replace('/[.]{3,}/', '...', $text);
         $text = preg_replace('/[!]{2,}/', '!', $text);
         $text = preg_replace('/[?]{2,}/', '?', $text);
-        
-        // Clean up special characters that might cause issues
-        $text = str_replace(['•', '–', '—'], ['-', '-', '-'], $text);
-        
         return trim($text);
     }
 
@@ -357,16 +460,12 @@ class AIVoice_Public {
             return $cached_audio_url;
         }
 
-        // Improved chunking strategy
         $text_chunks = $this->smart_chunk_text($text_to_speak);
         $audio_files = [];
-        $upload_dir = wp_upload_dir();
 
-        // Process chunks with retry mechanism
-        foreach ($text_chunks as $index => $chunk) {
+        foreach ($text_chunks as $chunk) {
             $chunk_result = $this->generate_audio_for_chunk_with_retry($post_id, $chunk, 2);
             if (is_wp_error($chunk_result)) {
-                // Clean up any successful chunks
                 foreach ($audio_files as $file_path) {
                     if (file_exists($file_path)) {
                         unlink($file_path);
@@ -378,15 +477,13 @@ class AIVoice_Public {
         }
         
         if (empty($audio_files)) {
-             return new WP_Error('no_audio_generated', 'Could not generate any audio chunks.');
+            return new WP_Error('no_audio_generated', 'Could not generate any audio chunks.');
         }
 
-        // Merge audio files
         return $this->merge_audio_files($post_id, $audio_files, $content_hash);
     }
 
     private function smart_chunk_text($text) {
-        // Split by sentences first
         $sentences = preg_split('/(?<=[.?!])\s+/', $text, -1, PREG_SPLIT_NO_EMPTY);
         $chunks = [];
         $current_chunk = '';
@@ -394,14 +491,11 @@ class AIVoice_Public {
         foreach ($sentences as $sentence) {
             $sentence = trim($sentence);
             if (empty($sentence)) continue;
-            
-            // If adding this sentence would exceed chunk size, start a new chunk
             if (strlen($current_chunk . ' ' . $sentence) > $this->max_chunk_size) {
                 if (!empty($current_chunk)) {
                     $chunks[] = trim($current_chunk);
                     $current_chunk = $sentence;
                 } else {
-                    // Single sentence is too long, split by words
                     $word_chunks = $this->split_by_words($sentence);
                     $chunks = array_merge($chunks, $word_chunks);
                 }
@@ -409,11 +503,7 @@ class AIVoice_Public {
                 $current_chunk .= (empty($current_chunk) ? '' : ' ') . $sentence;
             }
         }
-        
-        if (!empty($current_chunk)) {
-            $chunks[] = trim($current_chunk);
-        }
-        
+        if (!empty($current_chunk)) $chunks[] = trim($current_chunk);
         return array_filter($chunks, function($chunk) {
             return strlen(trim($chunk)) > 0;
         });
@@ -423,56 +513,41 @@ class AIVoice_Public {
         $words = explode(' ', $text);
         $chunks = [];
         $current_chunk = '';
-        
         foreach ($words as $word) {
             if (strlen($current_chunk . ' ' . $word) > $this->max_chunk_size) {
                 if (!empty($current_chunk)) {
                     $chunks[] = trim($current_chunk);
                     $current_chunk = $word;
                 } else {
-                    // Single word is too long, just add it
                     $chunks[] = $word;
                 }
             } else {
                 $current_chunk .= (empty($current_chunk) ? '' : ' ') . $word;
             }
         }
-        
-        if (!empty($current_chunk)) {
-            $chunks[] = trim($current_chunk);
-        }
-        
+        if (!empty($current_chunk)) $chunks[] = trim($current_chunk);
         return $chunks;
     }
 
     private function generate_audio_for_chunk_with_retry($post_id, $text_chunk, $max_retries = 2) {
         $last_error = null;
-        
         for ($attempt = 1; $attempt <= $max_retries; $attempt++) {
             $result = $this->generate_audio_for_chunk($post_id, $text_chunk);
-            
             if (!is_wp_error($result)) {
                 return $result;
             }
-            
             $last_error = $result;
-            
-            // Wait before retry (exponential backoff)
             if ($attempt < $max_retries) {
                 sleep($attempt);
             }
         }
-        
         return $last_error;
     }
 
     private function verify_audio_file_exists($url) {
         if (empty($url)) return false;
-        
-        // Convert URL to file path
         $upload_dir = wp_upload_dir();
         $file_path = str_replace($upload_dir['baseurl'], $upload_dir['basedir'], $url);
-        
         return file_exists($file_path);
     }
 
@@ -483,14 +558,12 @@ class AIVoice_Public {
         $final_fileurl = $upload_dir['url'] . '/' . $final_filename;
 
         if (!rename($audio_file_path, $final_filepath)) {
-            // If rename fails, try copy and delete
             if (!copy($audio_file_path, $final_filepath)) {
-                 return new WP_Error('file_move_failed', 'Failed to move/copy audio file.');
+                return new WP_Error('file_move_failed', 'Failed to move/copy audio file.');
             }
             unlink($audio_file_path);
         }
 
-        // Create WordPress attachment
         $attachment = [
             'guid' => $final_fileurl,
             'post_mime_type' => 'audio/mpeg',
@@ -498,9 +571,7 @@ class AIVoice_Public {
             'post_content' => '',
             'post_status' => 'inherit'
         ];
-        
         $attach_id = wp_insert_attachment($attachment, $final_filepath, $post_id);
-        
         if (!is_wp_error($attach_id)) {
             require_once(ABSPATH . 'wp-admin/includes/media.php');
             require_once(ABSPATH . 'wp-admin/includes/image.php');
@@ -509,21 +580,15 @@ class AIVoice_Public {
         }
 
         update_post_meta($post_id, '_ai_voice_audio_url_' . $content_hash, $final_fileurl);
-
         return $final_fileurl;
     }
 
     private function merge_audio_files($post_id, $audio_files, $content_hash) {
-        $upload_dir = wp_upload_dir();
-        
-        // Create a temporary file for merging
         $temp_merged_file = wp_tempnam('ai-voice-merged-');
         $file_handle = fopen($temp_merged_file, 'wb');
-
         if (!$file_handle) {
             return new WP_Error('merge_failed', 'Could not open temporary file for merging.');
         }
-
         foreach ($audio_files as $file_path) {
             if (file_exists($file_path)) {
                 $chunk_content = file_get_contents($file_path);
@@ -532,12 +597,10 @@ class AIVoice_Public {
             }
         }
         fclose($file_handle);
-        
         if (filesize($temp_merged_file) === 0) {
             unlink($temp_merged_file);
             return new WP_Error('merge_failed', 'No audio content to merge.');
         }
-
         return $this->save_audio_file($post_id, $temp_merged_file, $content_hash);
     }
     
@@ -551,14 +614,11 @@ class AIVoice_Public {
             case 'gemini': $api_key = $this->settings['gemini_api_key'] ?? ''; break;
             case 'openai': $api_key = $this->settings['openai_api_key'] ?? ''; break;
         }
-
         if (empty($api_key)) return new WP_Error('no_api_key', 'API key for ' . ucfirst($ai_service) . ' is not configured.');
         
         $response_body = null;
-        
-        // Optimized timeout settings
         $args = [
-            'timeout' => 30, // Reduced from 45 seconds
+            'timeout' => 30,
             'redirection' => 5,
             'httpversion' => '1.1',
             'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url'),
@@ -572,8 +632,6 @@ class AIVoice_Public {
             if ($voice_id === 'default') $voice_id = $this->settings['google_voice'] ?? 'en-US-Studio-O';
 
             $api_url = 'https://texttospeech.googleapis.com/v1/text:synthesize?key=' . $api_key;
-            
-            // Optimized request body
             $body = [
                 'input' => ['text' => $text_chunk],
                 'voice' => [
@@ -586,41 +644,27 @@ class AIVoice_Public {
                     'pitch' => 0.0
                 ]
             ];
-            
             $args['body'] = json_encode($body);
-            $args['headers'] = [
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json'
-            ];
-            
+            $args['headers'] = ['Content-Type' => 'application/json','Accept' => 'application/json'];
             $response = wp_remote_post($api_url, $args);
-
             if (is_wp_error($response)) {
                 return new WP_Error('google_request_failed', 'Google TTS request failed: ' . $response->get_error_message());
             }
-            
             $response_code = wp_remote_retrieve_response_code($response);
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            
             if ($response_code !== 200) {
                 $error_message = 'Google API Error (Code: ' . $response_code . ')';
-                if (isset($response_data['error']['message'])) {
-                    $error_message .= ': ' . $response_data['error']['message'];
-                }
+                if (isset($response_data['error']['message'])) $error_message .= ': ' . $response_data['error']['message'];
                 return new WP_Error('google_api_error', $error_message);
             }
-            
             if (!isset($response_data['audioContent'])) {
                 return new WP_Error('google_no_audio', 'Google API did not return audio content.');
             }
-            
             $response_body = base64_decode($response_data['audioContent']);
 
         } else if ($ai_service === 'gemini') {
-            // Gemini implementation (keeping existing code but with improved error handling)
             $voice_id = get_post_meta($post_id, '_ai_voice_gemini_voice', true) ?: ($this->settings['gemini_voice'] ?? 'Kore');
             if ($voice_id === 'default') $voice_id = $this->settings['gemini_voice'] ?? 'Kore';
-            
             $gemini_tone = get_post_meta($post_id, '_ai_voice_gemini_tone', true) ?: ($this->settings['gemini_tone'] ?? 'neutral');
             if ($gemini_tone === 'default') $gemini_tone = $this->settings['gemini_tone'] ?? 'neutral';
 
@@ -638,25 +682,24 @@ class AIVoice_Public {
                 'contents' => [['parts' => [['text' => $final_text]]]],
                 'generationConfig' => [
                     'responseModalities' => ["AUDIO"],
-                    'speechConfig' => ['voiceConfig' => ['prebuiltVoiceConfig' => ['voiceName' => $voice_id]]]
+                    'speechConfig' => [
+                        'voiceConfig'   => ['prebuiltVoiceConfig' => ['voiceName' => $voice_id]],
+                        'audioEncoding' => 'MP3'
+                    ]
                 ]
             ];
             $args['body'] = json_encode($body);
             $args['headers'] = ['Content-Type' => 'application/json'];
             $response = wp_remote_post($api_url, $args);
-
             if (is_wp_error($response)) return $response;
-            
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            
             if (wp_remote_retrieve_response_code($response) !== 200 || !isset($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
-                $error_message = $response_data['error']['message'] ?? 'Unknown error. Verify Google Cloud Project has billing enabled and the Generative Language API is active.';
+                $error_message = $response_data['error']['message'] ?? 'Unknown error. Verify billing + API enabled.';
                 return new WP_Error('gemini_api_error', 'Gemini API Error: ' . $error_message);
             }
             $response_body = base64_decode($response_data['candidates'][0]['content']['parts'][0]['inlineData']['data']);
 
         } else if ($ai_service === 'openai') {
-            // OpenAI implementation (keeping existing code)
             $voice_id = get_post_meta($post_id, '_ai_voice_openai_voice', true) ?: ($this->settings['openai_voice'] ?? 'nova');
             if ($voice_id === 'default') $voice_id = $this->settings['openai_voice'] ?? 'nova';
 
@@ -665,11 +708,10 @@ class AIVoice_Public {
             $args['body'] = json_encode($body);
             $args['headers'] = ['Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json'];
             $response = wp_remote_post($api_url, $args);
-
             if (is_wp_error($response)) return $response;
             $response_code = wp_remote_retrieve_response_code($response);
             if ($response_code !== 200) {
-                 return new WP_Error('openai_api_error', 'OpenAI API Error: ' . (json_decode(wp_remote_retrieve_body($response), true)['error']['message'] ?? 'Unknown error.'));
+                return new WP_Error('openai_api_error', 'OpenAI API Error: ' . (json_decode(wp_remote_retrieve_body($response), true)['error']['message'] ?? 'Unknown error.'));
             }
             $response_body = wp_remote_retrieve_body($response);
         }
@@ -677,9 +719,7 @@ class AIVoice_Public {
         if (empty($response_body)) {
             return new WP_Error('api_empty_response', 'API returned empty audio data.');
         }
-
-        // Validate audio data
-        if (strlen($response_body) < 100) { // MP3 files should be at least 100 bytes
+        if (strlen($response_body) < 100) {
             return new WP_Error('api_invalid_audio', 'API returned invalid audio data.');
         }
 
@@ -687,7 +727,6 @@ class AIVoice_Public {
         if (file_put_contents($temp_file, $response_body) === false) {
             return new WP_Error('temp_file_failed', 'Failed to write temporary audio file.');
         }
-        
         return $temp_file;
     }
 
@@ -701,7 +740,6 @@ class AIVoice_Public {
         $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
         if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
         
-        // Inject custom colors from settings
         $this->inject_custom_colors();
         
         wp_localize_script('ai-voice-player-js', 'aiVoiceData', [
@@ -715,7 +753,6 @@ class AIVoice_Public {
     }
 
     private function inject_custom_colors() {
-        // Get custom colors from settings
         $bg_light = $this->settings['bg_color_light'] ?? '#ffffff';
         $bg_dark = $this->settings['bg_color_dark'] ?? '#1e293b';
         $text_light = $this->settings['text_color_light'] ?? '#0f172a';
@@ -725,7 +762,6 @@ class AIVoice_Public {
         $summary_light = $this->settings['summary_color_light'] ?? '#6b7280';
         $summary_dark = $this->settings['summary_color_dark'] ?? '#9ca3af';
 
-        // Generate secondary colors (lighter versions for backgrounds)
         $bg_secondary_light = $this->lighten_color($bg_light, 0.04);
         $bg_secondary_dark = $this->lighten_color($bg_dark, 0.15);
         $text_secondary_light = $this->lighten_color($text_light, 0.4);
@@ -735,7 +771,6 @@ class AIVoice_Public {
         $accent_hover_light = $this->darken_color($accent_light, 0.1);
         $accent_hover_dark = $this->darken_color($accent_dark, 0.1);
 
-        // Create inline CSS with custom colors
         $custom_css = "
         #ai-voice-player-wrapper {
             --bg-light: {$bg_light};
@@ -761,39 +796,24 @@ class AIVoice_Public {
     }
 
     private function lighten_color($hex, $percent) {
-        // Remove # if present
         $hex = ltrim($hex, '#');
-        
-        // Convert hex to RGB
         $r = hexdec(substr($hex, 0, 2));
         $g = hexdec(substr($hex, 2, 2));
         $b = hexdec(substr($hex, 4, 2));
-        
-        // Lighten
         $r = min(255, $r + (255 - $r) * $percent);
         $g = min(255, $g + (255 - $g) * $percent);
         $b = min(255, $b + (255 - $b) * $percent);
-        
-        // Convert back to hex
         return sprintf('#%02x%02x%02x', round($r), round($g), round($b));
     }
 
     private function darken_color($hex, $percent) {
-        // Remove # if present
         $hex = ltrim($hex, '#');
-        
-        // Convert hex to RGB
         $r = hexdec(substr($hex, 0, 2));
         $g = hexdec(substr($hex, 2, 2));
         $b = hexdec(substr($hex, 4, 2));
-        
-        // Darken
         $r = max(0, $r * (1 - $percent));
         $g = max(0, $g * (1 - $percent));
         $b = max(0, $b * (1 - $percent));
-        
-        // Convert back to hex
         return sprintf('#%02x%02x%02x', round($r), round($g), round($b));
     }
 }
-

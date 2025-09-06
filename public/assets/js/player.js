@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const wrapper = document.getElementById("ai-voice-player-wrapper");
   if (!wrapper || typeof aiVoiceData === "undefined") return;
 
-  // --- DOM ELEMENTS ---
+  // Elements
   const playerContainer = wrapper.querySelector(".ai-voice-player-container");
   const summaryBtn = wrapper.querySelector("#ai-voice-summary-btn");
   const summaryIcon = wrapper.querySelector("#ai-voice-summary-icon");
@@ -28,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const speedModal = wrapper.querySelector("#ai-voice-speed-modal");
   const voiceModal = wrapper.querySelector("#ai-voice-voice-modal");
 
-  // --- AUDIO & STATE ---
+  // Audio + state
   const audio = new Audio();
   let isGenerating = false;
   let isGeneratingSummary = false;
@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let generationAttempts = 0;
   let summaryGenerated = false;
   const maxGenerationAttempts = 2;
+  let audioHadError = false;
 
   const voices = {
     google: [
@@ -64,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ],
   };
 
-  // --- FUNCTIONS ---
+  // Helpers
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds < 0) return "0:00";
     const minutes = Math.floor(seconds / 60);
@@ -77,7 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ? (audio.currentTime / audio.duration) * 100
       : 0;
 
-    // Get computed CSS variables from the actual element
     const computedStyles = getComputedStyle(wrapper);
     const accentColor =
       currentTheme === "light"
@@ -88,7 +88,6 @@ document.addEventListener("DOMContentLoaded", () => {
         ? computedStyles.getPropertyValue("--bg-secondary-light").trim()
         : computedStyles.getPropertyValue("--bg-secondary-dark").trim();
 
-    // Fallback colors if CSS variables aren't loaded
     const fallbackAccent = currentTheme === "light" ? "#3b82f6" : "#60a5fa";
     const fallbackBg = currentTheme === "light" ? "#f1f5f9" : "#334155";
 
@@ -141,48 +140,40 @@ document.addEventListener("DOMContentLoaded", () => {
     articleTitleEl.style.color = "";
   };
 
-  const togglePlayPause = () => {
-    if (isGenerating) return;
-
-    if (!audio.src) {
-      generateAudio();
-      return;
+  // Try to lock onto the main article content for SmartMag and similar themes
+  const findContentNode = () => {
+    const selectors = [
+      "article .entry-content",
+      ".single .entry-content",
+      ".post .entry-content",
+      ".post-content",
+      ".single-content",
+      ".article-content",
+      ".the-content",
+      "main .entry-content",
+      "main .content",
+      "article",
+      ".post",
+      "main",
+      "#content",
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el && (el.innerText || "").trim().length > 200) return el;
     }
-
-    clearError();
-    audio.paused ? audio.play() : audio.pause();
-  };
-
-  const toggleSummary = () => {
-    if (isGeneratingSummary) return;
-
-    if (!summaryGenerated) {
-      generateSummary();
-    } else {
-      // Toggle summary section visibility
-      if (summarySection.style.display === "none") {
-        summarySection.style.display = "block";
-      } else {
-        summarySection.style.display = "none";
-      }
-    }
+    return (
+      wrapper.closest("article, .post, .entry-content, main, .content") ||
+      wrapper.parentElement
+    );
   };
 
   const getVisibleText = () => {
-    let contentNode = wrapper.closest(
-      "article, .post, .entry-content, main, .content"
-    );
-    if (!contentNode) {
-      contentNode = wrapper.parentElement;
-    }
-
+    const contentNode = findContentNode();
     const clone = contentNode.cloneNode(true);
 
-    // Remove the player itself
     const playerClone = clone.querySelector("#ai-voice-player-wrapper");
     if (playerClone) playerClone.remove();
 
-    // Remove unwanted elements
     clone
       .querySelectorAll(
         [
@@ -209,11 +200,18 @@ document.addEventListener("DOMContentLoaded", () => {
       .forEach((el) => el.remove());
 
     let text = clone.textContent || clone.innerText || "";
-
-    // Clean up the text
     text = text.replace(/\s+/g, " ").trim();
 
-    // Remove common unwanted phrases
+    // Strip leading "(CITY – Date) – " if present
+    text = text.replace(/^\(([^)]{1,120})\)\s*(?:[-–—]\s*)?/u, (m, g1) =>
+      /\b(19|20)\d{2}\b|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday\b/i.test(
+        g1
+      )
+        ? ""
+        : m
+    );
+
+    // Remove page chrome that slipped in
     text = text.replace(
       /^(Skip to content|Menu|Search|Home|About|Contact)[\s\n]*/gi,
       ""
@@ -224,6 +222,29 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     return text;
+  };
+
+  const togglePlayPause = () => {
+    if (isGenerating) return;
+
+    if (!audio.src) {
+      generateAudio();
+      return;
+    }
+
+    clearError();
+    audio.paused ? audio.play() : audio.pause();
+  };
+
+  const toggleSummary = () => {
+    if (isGeneratingSummary) return;
+
+    if (!summaryGenerated) {
+      generateSummary();
+    } else {
+      summarySection.style.display =
+        summarySection.style.display === "none" ? "block" : "none";
+    }
   };
 
   const generateSummary = () => {
@@ -256,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
         post_id: aiVoiceData.post_id,
         text_to_summarize: textToSummarize,
       },
-      timeout: 60000, // 1 minute timeout
+      timeout: 60000,
       success: function (response) {
         console.log("AI Voice: Summary response:", response);
 
@@ -271,16 +292,8 @@ document.addEventListener("DOMContentLoaded", () => {
           showSummaryError(errorMsg);
         }
       },
-      error: function (jqXHR, textStatus, errorThrown) {
-        console.error("AI Voice: Summary AJAX Error:", {
-          status: jqXHR.status,
-          textStatus,
-          errorThrown,
-          responseText: jqXHR.responseText?.substring(0, 500),
-        });
-
+      error: function (jqXHR, textStatus) {
         let errorMessage = "Summary request failed.";
-
         if (textStatus === "timeout") {
           errorMessage = "Summary request timed out. Please try again.";
         } else if (jqXHR.status === 500) {
@@ -288,7 +301,6 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (jqXHR.status === 0) {
           errorMessage = "Network error. Check your internet connection.";
         }
-
         showSummaryError(errorMessage);
       },
     });
@@ -303,7 +315,6 @@ document.addEventListener("DOMContentLoaded", () => {
     playIcon.style.display = "none";
     loader.style.display = "block";
 
-    // Show generating status
     articleTitleEl.textContent = "Generating audio...";
     articleTitleEl.style.color = "";
 
@@ -329,15 +340,15 @@ document.addEventListener("DOMContentLoaded", () => {
         post_id: aiVoiceData.post_id,
         text_to_speak: textToSpeak,
       },
-      timeout: 180000, // 3 minutes timeout
+      timeout: 180000,
       success: function (response) {
         console.log("AI Voice: Generation response:", response);
 
         if (response.success) {
-          audio.src = response.data.audioUrl;
+          const mp3Url = response.data.audioUrl; // stream endpoint or direct URL depending on your PHP
+          audio.src = mp3Url;
           clearError();
 
-          // Auto-play after successful generation
           audio.play().catch((error) => {
             console.warn("AI Voice: Auto-play prevented by browser:", error);
             resetPlayerState();
@@ -347,15 +358,10 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
           const errorMsg = response.data?.message || "Generation failed.";
 
-          // Retry logic for certain errors
           if (
             generationAttempts < maxGenerationAttempts &&
             (errorMsg.includes("timeout") || errorMsg.includes("temporary"))
           ) {
-            console.log(
-              "AI Voice: Retrying generation, attempt",
-              generationAttempts + 1
-            );
             setTimeout(() => {
               isGenerating = false;
               generateAudio();
@@ -366,16 +372,8 @@ document.addEventListener("DOMContentLoaded", () => {
           showError(errorMsg);
         }
       },
-      error: function (jqXHR, textStatus, errorThrown) {
-        console.error("AI Voice: AJAX Error:", {
-          status: jqXHR.status,
-          textStatus,
-          errorThrown,
-          responseText: jqXHR.responseText?.substring(0, 500),
-        });
-
+      error: function (jqXHR, textStatus) {
         let errorMessage = "Request failed.";
-
         if (textStatus === "timeout") {
           errorMessage = "Request timed out. The text might be too long.";
         } else if (jqXHR.status === 524) {
@@ -386,19 +384,12 @@ document.addEventListener("DOMContentLoaded", () => {
           errorMessage = "Network error. Check your internet connection.";
         }
 
-        // Retry for network/timeout errors
         if (
           generationAttempts < maxGenerationAttempts &&
           (textStatus === "timeout" ||
             jqXHR.status === 524 ||
             jqXHR.status === 0)
         ) {
-          console.log(
-            "AI Voice: Retrying due to",
-            textStatus,
-            "- attempt",
-            generationAttempts + 1
-          );
           setTimeout(() => {
             isGenerating = false;
             generateAudio();
@@ -411,6 +402,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  // Single definitions (no duplicates)
   const updateTheme = (theme) => {
     currentTheme = theme;
     playerContainer.dataset.theme = theme;
@@ -426,8 +418,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const updateAILogo = () => {
     const service = aiVoiceData.aiService || "google";
-
-    // Fixed SVG paths
     if (service === "google") {
       aiLogoContainer.innerHTML = `
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -447,13 +437,72 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (service === "openai") {
       aiLogoContainer.innerHTML = `
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22.282 9.821c-.29-2.737-2.2-4.648-4.937-4.937a5.85 5.85 0 0 0-4.546 1.567 5.85 5.85 0 0 0-4.546-1.567c-2.737.289-4.647 2.2-4.937 4.937a5.85 5.85 0 0 0 1.567 4.546 5.85 5.85 0 0 0-1.567 4.546c.29 2.737 2.2 4.647 4.937 4.937a5.85 5.85 0 0 0 4.546-1.567 5.85 5.85 0 0 0 4.546 1.567c2.737-.29 4.647-2.2 4.937-4.937a5.85 5.85 0 0 0-1.567-4.546 5.85 5.85 0 0 0 1.567-4.546zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
+          <path d="M22.282 9.821c-.29-2.737-2.2-4.648-4.937-4.937a5.85 5.85 0 0 0-4.546 1.567 5.85 5.85 0 0 0-4.546-1.567c-2.737.289-4.647 2.2-4.937 4.937a5.85 5.85 0 0 0 1.567 4.546 5.85 5.85 0 0 0 1.567 4.546c.29 2.737 2.2 4.647 4.937 4.937a5.85 5.85 0 0 0 4.546-1.567 5.85 5.85 0 0 0 4.546 1.567c2.737-.29 4.647-2.2 4.937-4.937a5.85 5.85 0 0 0-1.567-4.546 5.85 5.85 0 0 0 1.567-4.546zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
         </svg>
         <span>Voiced by OpenAI</span>`;
     }
   };
 
-  const setupSpeedModal = () => {
+  // Event listeners
+  summaryBtn.addEventListener("click", () => toggleSummary());
+  playPauseBtn.addEventListener("click", () => togglePlayPause());
+  summaryClose.addEventListener(
+    "click",
+    () => (summarySection.style.display = "none")
+  );
+
+  audio.addEventListener("play", () => {
+    playIcon.style.display = "none";
+    pauseIcon.style.display = "block";
+    isGenerating = false;
+    playPauseBtn.disabled = false;
+    loader.style.display = "none";
+  });
+  audio.addEventListener("pause", () => {
+    pauseIcon.style.display = "none";
+    playIcon.style.display = "block";
+  });
+  audio.addEventListener("ended", () => {
+    audio.currentTime = 0;
+    audio.pause();
+  });
+  audio.addEventListener("loadedmetadata", () => {
+    totalTimeEl.textContent = formatTime(audio.duration);
+    progressBar.max = audio.duration;
+  });
+  audio.addEventListener("timeupdate", () => {
+    currentTimeEl.textContent = formatTime(audio.currentTime);
+    progressBar.value = audio.currentTime;
+    updateProgressBarUI();
+  });
+  audio.addEventListener("error", (e) => {
+    if (audioHadError) return;
+    audioHadError = true;
+    console.error("AI Voice: Audio error:", e);
+    showError("Audio playback failed. Please try regenerating.");
+    try {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    } catch {}
+    setTimeout(() => {
+      audioHadError = false;
+    }, 2000);
+  });
+  audio.addEventListener("loadstart", () => clearError());
+
+  progressBar.addEventListener("input", (e) => {
+    if (audio.src && audio.duration) {
+      audio.currentTime = parseFloat(e.target.value);
+      updateProgressBarUI();
+    }
+  });
+
+  themeToggle.addEventListener("click", () =>
+    updateTheme(currentTheme === "light" ? "dark" : "light")
+  );
+
+  speedBtn.addEventListener("click", () => {
     const speedContainer = speedModal.querySelector("#ai-voice-speed-options");
     speedContainer.innerHTML = "";
     [0.75, 1.0, 1.25, 1.5, 2.0].forEach((s) => {
@@ -472,9 +521,10 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       speedContainer.appendChild(btn);
     });
-  };
+    speedModal.style.display = "flex";
+  });
 
-  const setupVoiceModal = () => {
+  voiceBtn.addEventListener("click", () => {
     const voiceContainer = voiceModal.querySelector("#ai-voice-voice-options");
     voiceContainer.innerHTML = "";
     const currentVoices = voices[aiVoiceData.aiService] || voices.google;
@@ -487,86 +537,16 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       voiceContainer.appendChild(btn);
     });
-  };
-
-  // --- EVENT LISTENERS ---
-  summaryBtn.addEventListener("click", toggleSummary);
-  playPauseBtn.addEventListener("click", togglePlayPause);
-
-  summaryClose.addEventListener("click", () => {
-    summarySection.style.display = "none";
-  });
-
-  audio.addEventListener("play", () => {
-    playIcon.style.display = "none";
-    pauseIcon.style.display = "block";
-    isGenerating = false;
-    playPauseBtn.disabled = false;
-    loader.style.display = "none";
-  });
-
-  audio.addEventListener("pause", () => {
-    pauseIcon.style.display = "none";
-    playIcon.style.display = "block";
-  });
-
-  audio.addEventListener("ended", () => {
-    audio.currentTime = 0;
-    audio.pause();
-  });
-
-  audio.addEventListener("loadedmetadata", () => {
-    totalTimeEl.textContent = formatTime(audio.duration);
-    progressBar.max = audio.duration;
-  });
-
-  audio.addEventListener("timeupdate", () => {
-    currentTimeEl.textContent = formatTime(audio.currentTime);
-    progressBar.value = audio.currentTime;
-    updateProgressBarUI();
-  });
-
-  audio.addEventListener("error", (e) => {
-    console.error("AI Voice: Audio error:", e);
-    showError("Audio playback failed. Please try regenerating.");
-    audio.src = "";
-  });
-
-  audio.addEventListener("loadstart", () => {
-    clearError();
-  });
-
-  progressBar.addEventListener("input", (e) => {
-    if (audio.src && audio.duration) {
-      audio.currentTime = parseFloat(e.target.value);
-      updateProgressBarUI();
-    }
-  });
-
-  themeToggle.addEventListener("click", () =>
-    updateTheme(currentTheme === "light" ? "dark" : "light")
-  );
-
-  speedBtn.addEventListener("click", () => {
-    setupSpeedModal();
-    speedModal.style.display = "flex";
-  });
-
-  voiceBtn.addEventListener("click", () => {
-    setupVoiceModal();
     voiceModal.style.display = "flex";
   });
 
-  // Close modals when clicking outside
   speedModal.addEventListener("click", (e) => {
     if (e.target === speedModal) speedModal.style.display = "none";
   });
-
   voiceModal.addEventListener("click", (e) => {
     if (e.target === voiceModal) voiceModal.style.display = "none";
   });
 
-  // Close modals on Escape key
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       speedModal.style.display = "none";
@@ -574,13 +554,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // --- INITIALIZATION ---
+  // Init
   updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = "Listen to the article";
   updateProgressBarUI();
-
-  // Set initial playback rate
   audio.playbackRate = currentSpeed;
 
   console.log("AI Voice Player with Summary initialized successfully");
