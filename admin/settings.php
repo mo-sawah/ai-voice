@@ -110,6 +110,7 @@ class AIVoice_Settings {
                                 <select name="ai_voice_settings[local_ollama_model]">
                                     <option value="qwen2.5:14b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'qwen2.5:14b' ); ?>>Qwen2.5 14B (Best Quality)</option>
                                     <option value="llama3.1:8b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'llama3.1:8b' ); ?>>Llama 3.1 8B (Balanced)</option>
+                                    <option value="llama3.2:1b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'llama3.2:1b' ); ?>>Llama 3.2 1B (Ultra Fast)</option>
                                     <option value="dolphin-llama3:8b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'dolphin-llama3:8b' ); ?>>Dolphin Llama3 8B (Fast)</option>
                                 </select>
                             </td>
