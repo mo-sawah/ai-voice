@@ -55,6 +55,7 @@ class AIVoice_Metabox {
                 <option value="google" <?php selected( $ai_service, 'google' ); ?>>Google Cloud TTS</option>
                 <option value="gemini" <?php selected( $ai_service, 'gemini' ); ?>>Google AI (Gemini)</option>
                 <option value="openai" <?php selected( $ai_service, 'openai' ); ?>>OpenAI</option>
+                <option value="local" <?php selected( $ai_service, 'local' ); ?>>Local TTS (Coqui)</option>
             </select>
         </p>
         <p class="ai-voice-setting-row-postbox" data-service="gemini">

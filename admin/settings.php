@@ -91,8 +91,27 @@ class AIVoice_Settings {
                                 <select id="ai_voice_summary_api" name="ai_voice_settings[summary_api]">
                                     <option value="openrouter" <?php selected( $options['summary_api'] ?? 'openrouter', 'openrouter' ); ?>>OpenRouter</option>
                                     <option value="chatgpt" <?php selected( $options['summary_api'] ?? 'openrouter', 'chatgpt' ); ?>>ChatGPT (OpenAI Direct)</option>
+                                    <option value="local_ollama" <?php selected( $options['summary_api'] ?? 'openrouter', 'local_ollama' ); ?>>Local Ollama</option>
                                 </select>
-                                <p class="description">OpenRouter provides access to multiple AI models. ChatGPT uses OpenAI's API directly.</p>
+                            </td>
+                        </tr>
+                        <!-- Add local Ollama settings -->
+                        <tr class="ai-voice-summary-row" data-api="local_ollama">
+                            <th scope="row"><label for="ai_voice_settings[local_ollama_url]">Local Ollama API URL</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[local_ollama_url]" value="<?php echo esc_attr( $options['local_ollama_url'] ?? 'http://localhost:5001/v1/chat/completions' ); ?>" class="regular-text">
+                                <p class="description">URL of your local Ollama API server</p>
+                            </td>
+                        </tr>
+
+                        <tr class="ai-voice-summary-row" data-api="local_ollama">
+                            <th scope="row"><label for="ai_voice_settings[local_ollama_model]">Local Ollama Model</label></th>
+                            <td>
+                                <select name="ai_voice_settings[local_ollama_model]">
+                                    <option value="qwen2.5:14b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'qwen2.5:14b' ); ?>>Qwen2.5 14B (Best Quality)</option>
+                                    <option value="llama3.1:8b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'llama3.1:8b' ); ?>>Llama 3.1 8B (Balanced)</option>
+                                    <option value="dolphin-llama3:8b" <?php selected( $options['local_ollama_model'] ?? 'qwen2.5:14b', 'dolphin-llama3:8b' ); ?>>Dolphin Llama3 8B (Fast)</option>
+                                </select>
                             </td>
                         </tr>
                         <tr class="ai-voice-summary-row" data-api="openrouter">
@@ -162,7 +181,17 @@ class AIVoice_Settings {
                                     <option value="google" <?php selected( $options['default_ai'] ?? 'google', 'google' ); ?>>Google Cloud TTS</option>
                                     <option value="gemini" <?php selected( $options['default_ai'] ?? 'google', 'gemini' ); ?>>Google AI (Gemini)</option>
                                     <option value="openai" <?php selected( $options['default_ai'] ?? 'google', 'openai' ); ?>>OpenAI</option>
+                                    <option value="local" <?php selected( $options['default_ai'] ?? 'google', 'local' ); ?>>Local TTS (Coqui)</option>
                                 </select>
+                            </td>
+                        </tr>
+
+                        <!-- Add local TTS settings row -->
+                        <tr class="ai-voice-setting-row" data-service="local">
+                            <th scope="row"><label for="ai_voice_settings[local_tts_url]">Local TTS Server URL</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[local_tts_url]" value="<?php echo esc_attr( $options['local_tts_url'] ?? 'http://localhost:5000/synthesize' ); ?>" class="regular-text">
+                                <p class="description">URL of your local TTS server (default: http://localhost:5000/synthesize)</p>
                             </td>
                         </tr>
                         <tr class="ai-voice-setting-row" data-service="gemini">

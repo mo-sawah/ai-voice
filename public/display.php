@@ -10,6 +10,101 @@ class AIVoice_Public {
     private $max_chunk_size = 800;   // chunk size for TTS requests
     private $max_total_chars = 8000; // overall cap to avoid timeouts on shared hosting
 
+    // Local TTS method
+    private function generate_local_tts_audio($text_chunk) {
+        $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:5000/synthesize';
+        
+        $args = [
+            'timeout' => 120,
+            'headers' => [
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode([
+                'text' => $text_chunk,
+                'voice' => 'default'
+            ])
+        ];
+        
+        $response = wp_remote_post($local_tts_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('local_tts_request_failed', 'Local TTS request failed: ' . $response->get_error_message());
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Local TTS API Error (Code: ' . $code . ')';
+            if (isset($data['error'])) {
+                $msg .= ': ' . $data['error'];
+            }
+            return new WP_Error('local_tts_api_error', $msg);
+        }
+        
+        if (!isset($data['audioContent'])) {
+            return new WP_Error('local_tts_no_audio', 'Local TTS API did not return audio content.');
+        }
+        
+        // Decode base64 audio data
+        $audio_data = base64_decode($data['audioContent']);
+        
+        if (empty($audio_data)) {
+            return new WP_Error('local_tts_invalid_audio', 'Local TTS returned invalid audio data.');
+        }
+        
+        // Create temporary file
+        $temp_file = wp_tempnam('ai-voice-local-');
+        if (file_put_contents($temp_file, $audio_data) === false) {
+            return new WP_Error('temp_file_failed', 'Failed to write temporary audio file.');
+        }
+        
+        return $temp_file;
+    }
+
+    // Local Ollama summary method
+    private function generate_local_ollama_summary($text, $model, $prompt) {
+        $api_url = $this->settings['local_ollama_url'] ?? 'http://localhost:5001/v1/chat/completions';
+        
+        $messages = [
+            ['role'=>'system','content'=>$prompt],
+            ['role'=>'user','content'=>"Please analyze this article and provide the key takeaways:\n\n".$text]
+        ];
+
+        $args = [
+            'timeout' => 180, // Longer timeout for local models
+            'headers' => [
+                'Content-Type'  => 'application/json'
+            ],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 500,
+                'temperature' => 0.3
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        if (is_wp_error($response)) {
+            return new WP_Error('local_ollama_request_failed', 'Local Ollama request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Local Ollama API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('local_ollama_api_error', $msg);
+        }
+        
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('local_ollama_no_content', 'Local Ollama did not return summary content.');
+        }
+
+        return $this->format_summary($data['choices'][0]['message']['content']);
+    }
+
     public function __construct() {
         $this->settings = get_option('ai_voice_settings');
         add_filter( 'the_content', [ $this, 'maybe_display_player' ], 99 );
@@ -259,7 +354,11 @@ class AIVoice_Public {
         } else if ($summary_api === 'chatgpt') {
             $model = $this->settings['chatgpt_model'] ?? 'gpt-3.5-turbo';
             return $this->generate_chatgpt_summary($text, $model, $summary_prompt);
+        } else if ($summary_api === 'local_ollama') {
+            $model = $this->settings['local_ollama_model'] ?? 'qwen2.5:14b';
+            return $this->generate_local_ollama_summary($text, $model, $summary_prompt);
         }
+        
         return new WP_Error('invalid_api', 'Invalid summary API selected.');
     }
 
@@ -539,6 +638,11 @@ class AIVoice_Public {
     private function generate_audio_for_chunk($post_id, $text_chunk) {
         $ai_service = get_post_meta($post_id, '_ai_voice_ai_service', true) ?: ($this->settings['default_ai'] ?? 'google');
         if ($ai_service === 'default') $ai_service = $this->settings['default_ai'] ?? 'google';
+
+        // Add local TTS option
+        if ($ai_service === 'local') {
+            return $this->generate_local_tts_audio($text_chunk);
+        }
 
         $api_key = '';
         switch($ai_service) {
