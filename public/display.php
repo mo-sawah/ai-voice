@@ -437,30 +437,38 @@ class AIVoice_Public {
 
         $formatted = '<ul class="takeaways-list">';
         foreach ($lines as $line) {
-            // Skip common introductory phrases
-            if (empty($line) ||
-                preg_match('/^(here are|key takeaways?|takeaways?|summary|main points?):?$/i', $line) ||
+            if (empty($line)) continue;
+            
+            // Skip intro phrases
+            if (preg_match('/^(here are|key takeaways?|takeaways?|summary|main points?):?$/i', $line) ||
                 preg_match('/^here are the key takeaways from/i', $line) ||
                 preg_match('/^Key Takeaways:/i', $line) ||
                 preg_match('/^based on the article/i', $line)) continue;
 
-            // Remove list markers like bullets or numbers
-            $line = preg_replace('/^[-•*]\s*/', '', $line);
-            $line = preg_replace('/^\d+\.\s*/', '', $line);
-            
-            // --- THIS IS THE FIX ---
-            // We only check if the line has content, removing the > 10 character length check.
-            if (!empty($line)) {
+            // Handle lines that already have bullets (from your server)
+            if (preg_match('/^[•\-*]\s*(.+)/', $line, $matches)) {
+                $content = trim($matches[1]);
+                if (!empty($content) && strlen($content) > 10) {
+                    $formatted .= '<li>' . esc_html($content) . '</li>';
+                }
+            } 
+            // Handle numbered lists
+            else if (preg_match('/^\d+\.\s*(.+)/', $line, $matches)) {
+                $content = trim($matches[1]);
+                if (!empty($content) && strlen($content) > 10) {
+                    $formatted .= '<li>' . esc_html($content) . '</li>';
+                }
+            }
+            // Handle plain text lines (add as-is)
+            else if (strlen($line) > 10) {
                 $formatted .= '<li>' . esc_html($line) . '</li>';
             }
         }
         $formatted .= '</ul>';
-
-        // If, after all filtering, the list is empty, show a message.
+        
         if ($formatted === '<ul class="takeaways-list"></ul>') {
             return '<p>No valid takeaways could be extracted.</p>';
         }
-        
         return $formatted;
     }
 
