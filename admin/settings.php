@@ -166,6 +166,26 @@ class AIVoice_Settings {
                             <td><input type="checkbox" name="ai_voice_settings[enable_globally]" value="1" <?php checked( isset($options['enable_globally']) ? $options['enable_globally'] : 0, 1 ); ?>> <span class="description">Enable the audio player on all posts by default.</span></td>
                         </tr>
                         <tr>
+                            <th scope="row"><label for="ai_voice_settings[disabled_categories]">Disable for Categories</label></th>
+                            <td>
+                                <?php
+                                $disabled_categories = $options['disabled_categories'] ?? array();
+                                $categories = get_categories(array('hide_empty' => false));
+                                
+                                echo '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">';
+                                foreach ($categories as $category) {
+                                    $checked = in_array($category->term_id, (array)$disabled_categories) ? 'checked' : '';
+                                    echo '<label style="display: block; margin-bottom: 5px;">';
+                                    echo '<input type="checkbox" name="ai_voice_settings[disabled_categories][]" value="' . esc_attr($category->term_id) . '" ' . $checked . '> ';
+                                    echo esc_html($category->name) . ' (' . $category->count . ' posts)';
+                                    echo '</label>';
+                                }
+                                echo '</div>';
+                                ?>
+                                <p class="description">Select categories where the audio player should be disabled. This will affect all posts in these categories and their child categories.</p>
+                            </td>
+                        </tr>
+                        <tr>
                             <th scope="row"><label for="ai_voice_settings[generation_method]">Generation Method</label></th>
                             <td>
                                 <select name="ai_voice_settings[generation_method]">

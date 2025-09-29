@@ -10,6 +10,37 @@ class AIVoice_Public {
     private $max_chunk_size = 800;   // chunk size for TTS requests
     private $max_total_chars = 8000; // overall cap to avoid timeouts on shared hosting
 
+    /**
+     * Check if the post belongs to a disabled category
+     */
+    private function is_category_disabled( $post_id ) {
+        $disabled_categories = isset($this->settings['disabled_categories']) ? (array)$this->settings['disabled_categories'] : array();
+        
+        if ( empty($disabled_categories) ) {
+            return false;
+        }
+        
+        // Get all categories for this post (including parent categories)
+        $post_categories = wp_get_post_categories( $post_id );
+        
+        foreach ( $post_categories as $cat_id ) {
+            // Check if this category or any of its parents are disabled
+            if ( in_array( $cat_id, $disabled_categories ) ) {
+                return true;
+            }
+            
+            // Check parent categories
+            $parent_cats = get_ancestors( $cat_id, 'category' );
+            foreach ( $parent_cats as $parent_id ) {
+                if ( in_array( $parent_id, $disabled_categories ) ) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
     // Local TTS method
     private function generate_local_tts_audio($text_chunk) {
         $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:5000/synthesize';
@@ -149,6 +180,9 @@ class AIVoice_Public {
 
         $post_id = get_the_ID();
         if ( ! $post_id || get_post_type($post_id) !== 'post' ) return $content;
+
+        // Check if post belongs to a disabled category
+        if ( $this->is_category_disabled($post_id) ) return $content;
 
         $status = get_post_meta($post_id, '_ai_voice_status', true);
         $is_enabled_globally = !empty($this->settings['enable_globally']) && $this->settings['enable_globally'] == '1';
