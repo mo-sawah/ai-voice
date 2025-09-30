@@ -36,7 +36,6 @@ class AIVoice_Settings {
     public function render_settings_page() {
         $options = get_option( 'ai_voice_settings' );
         $google_voices = $this->get_google_voices();
-        $openrouter_models = $this->get_openrouter_models();
         $chatgpt_models = $this->get_chatgpt_models();
         ?>
         <div class="wrap">
@@ -118,19 +117,8 @@ class AIVoice_Settings {
                         <tr class="ai-voice-summary-row" data-api="openrouter">
                             <th scope="row"><label for="ai_voice_settings[summary_model]">OpenRouter Model</label></th>
                             <td>
-                                <select name="ai_voice_settings[summary_model]">
-                                    <?php
-                                    $current_model = $options['summary_model'] ?? 'anthropic/claude-3-haiku';
-                                    foreach ($openrouter_models as $category => $models) {
-                                        echo '<optgroup label="' . esc_attr($category) . '">';
-                                        foreach ($models as $model_id => $model_name) {
-                                            echo '<option value="' . esc_attr($model_id) . '" ' . selected($current_model, $model_id, false) . '>' . esc_html($model_name) . '</option>';
-                                        }
-                                        echo '</optgroup>';
-                                    }
-                                    ?>
-                                </select>
-                                <p class="description">Claude and GPT models work best for generating concise takeaways.</p>
+                                <input type="text" name="ai_voice_settings[summary_model]" value="<?php echo esc_attr( $options['summary_model'] ?? 'mistralai/mistral-7b-instruct:free' ); ?>" class="regular-text">
+                                <p class="description">Enter the OpenRouter model ID (e.g., <code>mistralai/mistral-7b-instruct:free</code>, <code>google/gemini-flash-1.5</code>, <code>anthropic/claude-3-haiku</code>).</p>
                             </td>
                         </tr>
                         <tr class="ai-voice-summary-row" data-api="chatgpt">
@@ -145,6 +133,26 @@ class AIVoice_Settings {
                                     ?>
                                 </select>
                                 <p class="description">GPT-3.5 is faster and cheaper, GPT-4 provides higher quality summaries.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[summary_language]">Summary Language</label></th>
+                            <td>
+                                <select name="ai_voice_settings[summary_language]">
+                                    <option value="english" <?php selected( $options['summary_language'] ?? 'english', 'english' ); ?>>English</option>
+                                    <option value="spanish" <?php selected( $options['summary_language'] ?? 'english', 'spanish' ); ?>>Spanish</option>
+                                    <option value="french" <?php selected( $options['summary_language'] ?? 'english', 'french' ); ?>>French</option>
+                                    <option value="german" <?php selected( $options['summary_language'] ?? 'english', 'german' ); ?>>German</option>
+                                    <option value="italian" <?php selected( $options['summary_language'] ?? 'english', 'italian' ); ?>>Italian</option>
+                                    <option value="portuguese" <?php selected( $options['summary_language'] ?? 'english', 'portuguese' ); ?>>Portuguese</option>
+                                    <option value="dutch" <?php selected( $options['summary_language'] ?? 'english', 'dutch' ); ?>>Dutch</option>
+                                    <option value="russian" <?php selected( $options['summary_language'] ?? 'english', 'russian' ); ?>>Russian</option>
+                                    <option value="chinese" <?php selected( $options['summary_language'] ?? 'english', 'chinese' ); ?>>Chinese</option>
+                                    <option value="japanese" <?php selected( $options['summary_language'] ?? 'english', 'japanese' ); ?>>Japanese</option>
+                                    <option value="arabic" <?php selected( $options['summary_language'] ?? 'english', 'arabic' ); ?>>Arabic</option>
+                                    <option value="turkish" <?php selected( $options['summary_language'] ?? 'english', 'turkish' ); ?>>Turkish</option>
+                                </select>
+                                <p class="description">Force the AI to generate summaries in this language.</p>
                             </td>
                         </tr>
                         <tr>
@@ -381,27 +389,6 @@ class AIVoice_Settings {
             'Italian (Italy)' => [
                 'it-IT-Neural2-A' => 'Female A',
                 'it-IT-Neural2-C' => 'Male C',
-            ]
-        ];
-    }
-
-    public function get_openrouter_models() {
-        return [
-            'Anthropic (Recommended)' => [
-                'anthropic/claude-3-haiku' => 'Claude 3 Haiku (Fast & Affordable)',
-                'anthropic/claude-3-sonnet' => 'Claude 3 Sonnet (Balanced)',
-                'anthropic/claude-3-opus' => 'Claude 3 Opus (Highest Quality)',
-            ],
-            'OpenAI' => [
-                'openai/gpt-3.5-turbo' => 'GPT-3.5 Turbo (Fast)',
-                'openai/gpt-4' => 'GPT-4 (High Quality)',
-                'openai/gpt-4-turbo' => 'GPT-4 Turbo (Latest)',
-            ],
-            'Meta' => [
-                'meta-llama/llama-2-70b-chat' => 'Llama 2 70B (Open Source)',
-            ],
-            'Google' => [
-                'google/gemini-pro' => 'Gemini Pro',
             ]
         ];
     }

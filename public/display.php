@@ -400,9 +400,12 @@ class AIVoice_Public {
         $api_key = $this->settings['openrouter_api_key'] ?? '';
         if (empty($api_key)) return new WP_Error('no_api_key', 'OpenRouter API key not configured.');
 
+        $language = $this->settings['summary_language'] ?? 'english';
+        $language_instruction = "Respond ONLY in " . ucfirst($language) . ". ";
+        
         $api_url = 'https://openrouter.ai/api/v1/chat/completions';
         $messages = [
-            ['role'=>'system','content'=>$prompt],
+            ['role'=>'system','content'=> $language_instruction . $prompt],
             ['role'=>'user','content'=>"Please analyze this article and provide the key takeaways:\n\n".$text]
         ];
 
