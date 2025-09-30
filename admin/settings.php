@@ -41,9 +41,7 @@ class AIVoice_Settings {
         <div class="wrap">
             <h1>AI Voice Settings</h1>
             <form action="options.php" method="post">
-                <?php
-                settings_fields( 'ai_voice_group' );
-                ?>
+                <?php settings_fields( 'ai_voice_group' ); ?>
                 
                 <h2 class="title">API Keys</h2>
                 <p>Enter your API keys from Google Cloud, Google AI (Gemini), OpenAI, and summary services.</p>
@@ -75,6 +73,101 @@ class AIVoice_Settings {
                         </tr>
                     </tbody>
                 </table>
+
+                <h2 class="title">Frontend Text Customization</h2>
+                <p>Customize all text displayed to users on the frontend player.</p>
+                <table class="form-table">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_listen_to_article]">Player Title Text</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_listen_to_article]" value="<?php echo esc_attr( $options['text_listen_to_article'] ?? 'Listen to the article' ); ?>" class="regular-text">
+                                <p class="description">Default text shown in the player header.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_generating_audio]">Generating Audio Text</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_generating_audio]" value="<?php echo esc_attr( $options['text_generating_audio'] ?? 'Generating audio...' ); ?>" class="regular-text">
+                                <p class="description">Text shown while audio is being generated.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_key_takeaways]">Key Takeaways Title</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_key_takeaways]" value="<?php echo esc_attr( $options['text_key_takeaways'] ?? 'Key Takeaways' ); ?>" class="regular-text">
+                                <p class="description">Title for the summary section.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_play_pause_label]">Play/Pause Button Label</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_play_pause_label]" value="<?php echo esc_attr( $options['text_play_pause_label'] ?? 'Play/Pause Audio' ); ?>" class="regular-text">
+                                <p class="description">Accessibility label for the play/pause button.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_summary_button_label]">Summary Button Label</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_summary_button_label]" value="<?php echo esc_attr( $options['text_summary_button_label'] ?? 'Generate Article Summary' ); ?>" class="regular-text">
+                                <p class="description">Accessibility label for the summary button.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_change_voice_label]">Change Voice Label</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_change_voice_label]" value="<?php echo esc_attr( $options['text_change_voice_label'] ?? 'Change Voice' ); ?>" class="regular-text">
+                                <p class="description">Accessibility label for the voice selection button.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_toggle_theme_label]">Toggle Theme Label</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_toggle_theme_label]" value="<?php echo esc_attr( $options['text_toggle_theme_label'] ?? 'Toggle Theme' ); ?>" class="regular-text">
+                                <p class="description">Accessibility label for the theme toggle button.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_close_summary_label]">Close Summary Label</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_close_summary_label]" value="<?php echo esc_attr( $options['text_close_summary_label'] ?? 'Close Summary' ); ?>" class="regular-text">
+                                <p class="description">Accessibility label for the close summary button.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_playback_speed]">Playback Speed Modal Title</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_playback_speed]" value="<?php echo esc_attr( $options['text_playback_speed'] ?? 'Playback Speed' ); ?>" class="regular-text">
+                                <p class="description">Title for the playback speed selection modal.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_select_voice]">Select Voice Modal Title</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_select_voice]" value="<?php echo esc_attr( $options['text_select_voice'] ?? 'Select a Voice' ); ?>" class="regular-text">
+                                <p class="description">Title for the voice selection modal.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_voiced_by_google]">Voiced by Google Text</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_voiced_by_google]" value="<?php echo esc_attr( $options['text_voiced_by_google'] ?? 'Voiced by Google Cloud' ); ?>" class="regular-text">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_voiced_by_gemini]">Voiced by Gemini Text</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_voiced_by_gemini]" value="<?php echo esc_attr( $options['text_voiced_by_gemini'] ?? 'Voiced by Gemini' ); ?>" class="regular-text">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[text_voiced_by_openai]">Voiced by OpenAI Text</label></th>
+                            <td>
+                                <input type="text" name="ai_voice_settings[text_voiced_by_openai]" value="<?php echo esc_attr( $options['text_voiced_by_openai'] ?? 'Voiced by OpenAI' ); ?>" class="regular-text">
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
                 
                 <h2 class="title">Summary Settings</h2>
                 <p>Configure the AI-powered summary feature that generates key takeaways from articles.</p>
@@ -94,7 +187,6 @@ class AIVoice_Settings {
                                 </select>
                             </td>
                         </tr>
-                        <!-- Add local Ollama settings -->
                         <tr class="ai-voice-summary-row" data-api="local_ollama">
                             <th scope="row"><label for="ai_voice_settings[local_ollama_url]">Local Ollama API URL</label></th>
                             <td>
@@ -102,7 +194,6 @@ class AIVoice_Settings {
                                 <p class="description">URL of your local Ollama API server</p>
                             </td>
                         </tr>
-
                         <tr class="ai-voice-summary-row" data-api="local_ollama">
                             <th scope="row"><label for="ai_voice_settings[local_ollama_model]">Local Ollama Model</label></th>
                             <td>
@@ -117,8 +208,8 @@ class AIVoice_Settings {
                         <tr class="ai-voice-summary-row" data-api="openrouter">
                             <th scope="row"><label for="ai_voice_settings[summary_model]">OpenRouter Model</label></th>
                             <td>
-                                <input type="text" name="ai_voice_settings[summary_model]" value="<?php echo esc_attr( $options['summary_model'] ?? 'mistralai/mistral-7b-instruct:free' ); ?>" class="regular-text">
-                                <p class="description">Enter the OpenRouter model ID (e.g., <code>mistralai/mistral-7b-instruct:free</code>, <code>google/gemini-flash-1.5</code>, <code>anthropic/claude-3-haiku</code>).</p>
+                                <input type="text" name="ai_voice_settings[summary_model]" value="<?php echo esc_attr( $options['summary_model'] ?? 'x-ai/grok-2-1212:free' ); ?>" class="regular-text">
+                                <p class="description">Enter the OpenRouter model ID. Examples: <code>x-ai/grok-2-1212:free</code>, <code>google/gemini-flash-1.5:free</code>, <code>mistralai/mistral-7b-instruct:free</code>, <code>anthropic/claude-3-haiku</code></p>
                             </td>
                         </tr>
                         <tr class="ai-voice-summary-row" data-api="chatgpt">
@@ -147,10 +238,12 @@ class AIVoice_Settings {
                                     <option value="portuguese" <?php selected( $options['summary_language'] ?? 'english', 'portuguese' ); ?>>Portuguese</option>
                                     <option value="dutch" <?php selected( $options['summary_language'] ?? 'english', 'dutch' ); ?>>Dutch</option>
                                     <option value="russian" <?php selected( $options['summary_language'] ?? 'english', 'russian' ); ?>>Russian</option>
-                                    <option value="chinese" <?php selected( $options['summary_language'] ?? 'english', 'chinese' ); ?>>Chinese</option>
+                                    <option value="chinese" <?php selected( $options['summary_language'] ?? 'english', 'chinese' ); ?>>Chinese (Simplified)</option>
                                     <option value="japanese" <?php selected( $options['summary_language'] ?? 'english', 'japanese' ); ?>>Japanese</option>
+                                    <option value="korean" <?php selected( $options['summary_language'] ?? 'english', 'korean' ); ?>>Korean</option>
                                     <option value="arabic" <?php selected( $options['summary_language'] ?? 'english', 'arabic' ); ?>>Arabic</option>
                                     <option value="turkish" <?php selected( $options['summary_language'] ?? 'english', 'turkish' ); ?>>Turkish</option>
+                                    <option value="hindi" <?php selected( $options['summary_language'] ?? 'english', 'hindi' ); ?>>Hindi</option>
                                 </select>
                                 <p class="description">Force the AI to generate summaries in this language.</p>
                             </td>
@@ -214,8 +307,6 @@ class AIVoice_Settings {
                                 </select>
                             </td>
                         </tr>
-
-                        <!-- Add local TTS settings row -->
                         <tr class="ai-voice-setting-row" data-service="local">
                             <th scope="row"><label for="ai_voice_settings[local_tts_url]">Local TTS Server URL</label></th>
                             <td>

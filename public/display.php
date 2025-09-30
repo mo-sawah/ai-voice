@@ -190,6 +190,16 @@ class AIVoice_Public {
 
         $this->prepare_frontend_scripts($post_id);
 
+        // Pass text settings to template
+        $text_settings = [
+            'summary_button_label' => $this->settings['text_summary_button_label'] ?? 'Generate Article Summary',
+            'play_pause_label' => $this->settings['text_play_pause_label'] ?? 'Play/Pause Audio',
+            'change_voice_label' => $this->settings['text_change_voice_label'] ?? 'Change Voice',
+            'toggle_theme_label' => $this->settings['text_toggle_theme_label'] ?? 'Toggle Theme',
+            'close_summary_label' => $this->settings['text_close_summary_label'] ?? 'Close Summary',
+            'key_takeaways' => $this->settings['text_key_takeaways'] ?? 'Key Takeaways',
+        ];
+
         ob_start();
         include( AI_VOICE_PLUGIN_DIR . 'public/partials/player-template.php' );
         $player_html = ob_get_clean();
@@ -813,6 +823,22 @@ class AIVoice_Public {
             'title'     => get_the_title($post_id),
             'theme'     => esc_attr($theme),
             'aiService' => esc_attr($ai_service),
+            // Add these new text fields:
+            'text' => [
+                'listen_to_article' => $this->settings['text_listen_to_article'] ?? 'Listen to the article',
+                'generating_audio' => $this->settings['text_generating_audio'] ?? 'Generating audio...',
+                'key_takeaways' => $this->settings['text_key_takeaways'] ?? 'Key Takeaways',
+                'play_pause_label' => $this->settings['text_play_pause_label'] ?? 'Play/Pause Audio',
+                'summary_button_label' => $this->settings['text_summary_button_label'] ?? 'Generate Article Summary',
+                'change_voice_label' => $this->settings['text_change_voice_label'] ?? 'Change Voice',
+                'toggle_theme_label' => $this->settings['text_toggle_theme_label'] ?? 'Toggle Theme',
+                'close_summary_label' => $this->settings['text_close_summary_label'] ?? 'Close Summary',
+                'playback_speed' => $this->settings['text_playback_speed'] ?? 'Playback Speed',
+                'select_voice' => $this->settings['text_select_voice'] ?? 'Select a Voice',
+                'voiced_by_google' => $this->settings['text_voiced_by_google'] ?? 'Voiced by Google Cloud',
+                'voiced_by_gemini' => $this->settings['text_voiced_by_gemini'] ?? 'Voiced by Gemini',
+                'voiced_by_openai' => $this->settings['text_voiced_by_openai'] ?? 'Voiced by OpenAI',
+            ]
         ]);
     }
 
