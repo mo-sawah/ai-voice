@@ -26,7 +26,7 @@ jQuery(document).ready(function ($) {
     voiceSelectId,
     forceRefresh = false
   ) {
-    const $languageSelect = $(languageSelectId.replace("_voice", "_language"));
+    const $languageSelect = $(voiceSelectId.replace("_voice", "_language"));
     const $voiceSelect = $(voiceSelectId);
     const $fetchButton = $("#fetch_edge_voices");
 
