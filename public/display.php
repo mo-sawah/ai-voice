@@ -10,6 +10,31 @@ class AIVoice_Public {
     private $max_chunk_size = 800;   // chunk size for TTS requests
     private $max_total_chars = 8000; // overall cap to avoid timeouts on shared hosting
 
+    private function check_edge_tts_server() {
+        $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+        $base_url = str_replace('/synthesize', '', $local_tts_url);
+        $health_url = $base_url . '/health';
+        
+        $response = wp_remote_get($health_url, [
+            'timeout' => 5,
+            'sslverify' => false
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log('AI Voice: Edge TTS server not responding - ' . $response->get_error_message());
+            return false;
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code === 200) {
+            error_log('AI Voice: ✅ Edge TTS server is healthy');
+            return true;
+        }
+        
+        error_log('AI Voice: Edge TTS server returned code ' . $code);
+        return false;
+    }
+
     /**
      * Check if the post belongs to a disabled category
      */
@@ -43,6 +68,15 @@ class AIVoice_Public {
     
     private function generate_local_tts_audio($text_chunk) {
         $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+
+        // Check server health FIRST (fail fast)
+        if (!$this->check_edge_tts_server()) {
+            return new WP_Error(
+                'edge_tts_server_down',
+                'Edge TTS server is not running. Please start the Python server on your PC at ' .
+                ($this->settings['local_tts_url'] ?? 'http://localhost:6000')
+            );
+        }
         
         // Get the voice setting (check post meta first, then global settings)
         $post_id = get_the_ID();

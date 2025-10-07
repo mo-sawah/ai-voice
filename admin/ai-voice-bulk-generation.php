@@ -24,9 +24,9 @@ class AIVoice_Bulk_Generation {
         add_submenu_page(
             'options-general.php',
             'AI Voice Bulk Generation',
-            'AI Voice Bulk',
+            'Bulk Generation',  // ← Changed name to avoid duplicate
             'manage_options',
-            'ai-voice-bulk',
+            'ai-voice-bulk-generation',  // ← Changed slug
             [$this, 'render_page']
         );
     }
