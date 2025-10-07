@@ -130,12 +130,12 @@ jQuery(document).ready(function ($) {
 
   // ✅ NEW: Populate voice dropdown with grouped voices
   function populateVoiceDropdown($select, groupedVoices) {
-    const currentValue = $select.val();
+    const currentValue = $select.data("saved-value") || $select.val(); // Use data attribute first
 
-    // Clear and add default option
-    $select
-      .empty()
-      .append('<option value="default">Use Global Setting</option>');
+    console.log("AI Voice: Populating dropdown, current value:", currentValue);
+
+    // Clear existing options
+    $select.empty();
 
     // Add voices grouped by locale
     groupedVoices.forEach(function (group) {
@@ -162,6 +162,7 @@ jQuery(document).ready(function ($) {
       $select.find('option[value="' + currentValue + '"]').length
     ) {
       $select.val(currentValue);
+      console.log("AI Voice: ✅ Restored voice selection:", currentValue);
     }
   }
 
@@ -269,15 +270,36 @@ jQuery(document).ready(function ($) {
   });
 
   // ✅ Auto-load voices on page load if Edge TTS selected (Settings Page)
-  if (serviceSelect.val() === "local" && $("#edge_voice option").length <= 3) {
+  if (serviceSelect.val() === "local") {
     const language = $("#edge_language").val();
+    const savedVoice = $("#edge_voice").data("saved-value"); // Get saved voice from data attribute
+
+    console.log(
+      "AI Voice: Page loaded with language:",
+      language,
+      "and saved voice:",
+      savedVoice
+    );
+
     if (language && language !== "default") {
       console.log(
         "AI Voice: Auto-loading voices for " + language + " on page load"
       );
+
       // Small delay to ensure page is fully loaded
       setTimeout(function () {
         fetchAndPopulateVoices(language, "#edge_voice", false);
+
+        // After voices load, restore the saved selection
+        setTimeout(function () {
+          if (
+            savedVoice &&
+            $("#edge_voice option[value='" + savedVoice + "']").length > 0
+          ) {
+            $("#edge_voice").val(savedVoice);
+            console.log("AI Voice: ✅ Restored saved voice:", savedVoice);
+          }
+        }, 1000);
       }, 500);
     }
   }

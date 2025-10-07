@@ -712,16 +712,13 @@ class AIVoice_Settings {
                         <tr class="ai-voice-setting-row" data-service="local">
                             <th scope="row"><label for="ai_voice_settings[edge_voice]">Default Voice</label></th>
                             <td>
-                                <select name="ai_voice_settings[edge_voice]" id="edge_voice" class="regular-text">
-                                    <option value="en-US-JennyNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-JennyNeural' ); ?>>Jenny (Female, US)</option>
-                                    <option value="en-US-GuyNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-GuyNeural' ); ?>>Guy (Male, US)</option>
-                                    <option value="en-US-AriaNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-AriaNeural' ); ?>>Aria (Female, US)</option>
-                                    <option value="el-GR-AthinaNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'el-GR-AthinaNeural' ); ?>>Athina (Female, Greek)</option>
-                                    <option value="el-GR-NestorasNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'el-GR-NestorasNeural' ); ?>>Nestoras (Male, Greek)</option>
-                                    <option value="ar-SA-ZariyahNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'ar-SA-ZariyahNeural' ); ?>>Zariyah (Female, Arabic)</option>
-                                    <option value="ar-SA-HamedNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'ar-SA-HamedNeural' ); ?>>Hamed (Male, Arabic)</option>
-                                    <option value="tr-TR-EmelNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'tr-TR-EmelNeural' ); ?>>Emel (Female, Turkish)</option>
-                                    <option value="tr-TR-AhmetNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'tr-TR-AhmetNeural' ); ?>>Ahmet (Male, Turkish)</option>
+                                <select name="ai_voice_settings[edge_voice]" id="edge_voice" class="regular-text" data-saved-value="<?php echo esc_attr($options['edge_voice'] ?? 'en-US-JennyNeural'); ?>">
+                                    <option value="<?php echo esc_attr($options['edge_voice'] ?? 'en-US-JennyNeural'); ?>">
+                                        <?php 
+                                        $saved_voice = $options['edge_voice'] ?? 'en-US-JennyNeural';
+                                        echo esc_html($saved_voice); 
+                                        ?>
+                                    </option>
                                 </select>
                                 <p class="description">Select the default voice. Change language above to see voices for that language.</p>
                                 <button type="button" id="fetch_edge_voices" class="button" style="margin-top: 10px;">Refresh Voices from Server</button>
