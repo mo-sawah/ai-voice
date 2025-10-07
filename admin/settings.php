@@ -8,6 +8,118 @@ if ( ! defined( 'WPINC' ) ) {
 
 class AIVoice_Settings {
 
+    /**
+     * Get voices from Edge TTS server with caching
+     */
+    private function get_edge_voices_from_server($language = '') {
+        $settings = get_option('ai_voice_settings');
+        $tts_url = $settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+        
+        // Remove /synthesize if present
+        $base_url = str_replace('/synthesize', '', $tts_url);
+        $voices_url = $base_url . '/voices';
+        
+        if (!empty($language) && $language !== 'default') {
+            $voices_url .= '?language=' . urlencode($language);
+        }
+        
+        // Check cache first (1 hour)
+        $cache_key = 'ai_voice_edge_voices_' . md5($voices_url);
+        $cached = get_transient($cache_key);
+        
+        if ($cached !== false) {
+            return $cached;
+        }
+        
+        // Fetch from server
+        $response = wp_remote_get($voices_url, [
+            'timeout' => 10,
+            'sslverify' => false
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log('AI Voice: Failed to fetch voices - ' . $response->get_error_message());
+            return new WP_Error('fetch_failed', 'Could not connect to Edge TTS server: ' . $response->get_error_message());
+        }
+        
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            error_log('AI Voice: Server returned code ' . $code);
+            return new WP_Error('server_error', 'Server returned code: ' . $code);
+        }
+        
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if (!isset($data['voices']) || !is_array($data['voices'])) {
+            return new WP_Error('invalid_response', 'Invalid response from server');
+        }
+        
+        // Cache for 1 hour
+        set_transient($cache_key, $data, HOUR_IN_SECONDS);
+        
+        return $data;
+    }
+
+    /**
+     * Get display name for locale
+     */
+    private function get_locale_display_name($locale) {
+        $locale_names = [
+            'en-US' => 'English (United States)',
+            'en-GB' => 'English (United Kingdom)',
+            'en-AU' => 'English (Australia)',
+            'en-CA' => 'English (Canada)',
+            'en-IN' => 'English (India)',
+            'es-ES' => 'Spanish (Spain)',
+            'es-MX' => 'Spanish (Mexico)',
+            'es-AR' => 'Spanish (Argentina)',
+            'fr-FR' => 'French (France)',
+            'fr-CA' => 'French (Canada)',
+            'de-DE' => 'German (Germany)',
+            'de-AT' => 'German (Austria)',
+            'it-IT' => 'Italian (Italy)',
+            'pt-PT' => 'Portuguese (Portugal)',
+            'pt-BR' => 'Portuguese (Brazil)',
+            'ru-RU' => 'Russian (Russia)',
+            'zh-CN' => 'Chinese (Simplified)',
+            'zh-TW' => 'Chinese (Traditional)',
+            'ja-JP' => 'Japanese (Japan)',
+            'ko-KR' => 'Korean (Korea)',
+            'ar-SA' => 'Arabic (Saudi Arabia)',
+            'ar-EG' => 'Arabic (Egypt)',
+            'el-GR' => 'Greek (Greece)',
+            'tr-TR' => 'Turkish (Turkey)',
+            'hi-IN' => 'Hindi (India)',
+            'th-TH' => 'Thai (Thailand)',
+            'vi-VN' => 'Vietnamese (Vietnam)',
+            'pl-PL' => 'Polish (Poland)',
+            'nl-NL' => 'Dutch (Netherlands)',
+            'sv-SE' => 'Swedish (Sweden)',
+            'da-DK' => 'Danish (Denmark)',
+            'no-NO' => 'Norwegian (Norway)',
+            'fi-FI' => 'Finnish (Finland)',
+        ];
+        
+        return $locale_names[$locale] ?? $locale;
+    }
+
+    /**
+     * AJAX: Clear voice cache
+     */
+    public function clear_voice_cache_ajax() {
+        check_ajax_referer('ai_voice_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permission denied']);
+        }
+        
+        global $wpdb;
+        $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_ai_voice_edge_voices_%'");
+        $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_ai_voice_edge_voices_%'");
+        
+        wp_send_json_success(['message' => 'Voice cache cleared']);
+    }
+
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
         add_action( 'admin_init', [ $this, 'register_settings' ] );
@@ -15,45 +127,94 @@ class AIVoice_Settings {
         
         // AJAX endpoint to fetch voices from Edge TTS server
         add_action( 'wp_ajax_ai_voice_fetch_edge_voices', [ $this, 'fetch_edge_voices_ajax' ] );
-    }
-    
-    public function enqueue_admin_scripts($hook) {
-        if ($hook !== 'settings_page_ai-voice') {
-            return;
-        }
-        wp_enqueue_script('ai-voice-admin-js', AI_VOICE_PLUGIN_URL . 'admin/assets/js/settings.js', ['jquery'], AI_VOICE_VERSION, true);
         
-        // Add AJAX URL for fetching voices
-        wp_localize_script('ai-voice-admin-js', 'aiVoiceAdmin', [
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('ai_voice_admin_nonce')
+        // ✅ NEW: Clear voice cache
+        add_action( 'wp_ajax_ai_voice_clear_voice_cache', [ $this, 'clear_voice_cache_ajax' ] );
+        
+        // ✅ NEW: Check Edge TTS server health
+        add_action( 'wp_ajax_ai_voice_check_edge_server', [ $this, 'check_edge_server_ajax' ] );
+    }
+
+    // ✅ NEW: Add this method
+    public function check_edge_server_ajax() {
+        check_ajax_referer('ai_voice_admin_nonce', 'nonce');
+        
+        $settings = get_option('ai_voice_settings');
+        $tts_url = $settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+        $base_url = str_replace('/synthesize', '', $tts_url);
+        $health_url = $base_url . '/health';
+        
+        $response = wp_remote_get($health_url, [
+            'timeout' => 3,
+            'sslverify' => false
         ]);
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => $response->get_error_message()]);
+        }
+        
+        if (wp_remote_retrieve_response_code($response) === 200) {
+            $data = json_decode(wp_remote_retrieve_body($response), true);
+            wp_send_json_success($data);
+        } else {
+            wp_send_json_error(['message' => 'Server returned code ' . wp_remote_retrieve_response_code($response)]);
+        }
     }
     
-    // AJAX handler to fetch voices from Edge TTS server
+    /**
+     * AJAX: Fetch voices from Edge TTS server
+     */
     public function fetch_edge_voices_ajax() {
         check_ajax_referer('ai_voice_admin_nonce', 'nonce');
         
         $language = isset($_POST['language']) ? sanitize_text_field($_POST['language']) : '';
-        $settings = get_option('ai_voice_settings');
-        $tts_url = $settings['local_tts_url'] ?? 'http://localhost:6000';
+        $force_refresh = isset($_POST['force_refresh']) && $_POST['force_refresh'] === 'true';
         
-        // Remove /synthesize if it's there
-        $base_url = str_replace('/synthesize', '', $tts_url);
-        $voices_url = $base_url . '/voices';
-        
-        if (!empty($language)) {
-            $voices_url .= '?language=' . $language;
+        // Clear cache if force refresh
+        if ($force_refresh) {
+            $settings = get_option('ai_voice_settings');
+            $tts_url = $settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+            $base_url = str_replace('/synthesize', '', $tts_url);
+            $voices_url = $base_url . '/voices';
+            if (!empty($language) && $language !== 'default') {
+                $voices_url .= '?language=' . urlencode($language);
+            }
+            $cache_key = 'ai_voice_edge_voices_' . md5($voices_url);
+            delete_transient($cache_key);
         }
         
-        $response = wp_remote_get($voices_url, ['timeout' => 10]);
+        $result = $this->get_edge_voices_from_server($language);
         
-        if (is_wp_error($response)) {
-            wp_send_json_error(['message' => 'Could not connect to TTS server']);
+        if (is_wp_error($result)) {
+            wp_send_json_error([
+                'message' => $result->get_error_message(),
+                'debug' => [
+                    'language' => $language,
+                    'server_url' => $settings['local_tts_url'] ?? 'not set'
+                ]
+            ]);
         }
         
-        $data = json_decode(wp_remote_retrieve_body($response), true);
-        wp_send_json_success($data);
+        // Group voices by locale for better organization
+        $grouped_voices = [];
+        foreach ($result['voices'] as $voice) {
+            $locale = $voice['language'];
+            if (!isset($grouped_voices[$locale])) {
+                $grouped_voices[$locale] = [
+                    'locale' => $locale,
+                    'locale_name' => $this->get_locale_display_name($locale),
+                    'voices' => []
+                ];
+            }
+            $grouped_voices[$locale]['voices'][] = $voice;
+        }
+        
+        wp_send_json_success([
+            'total' => $result['total'],
+            'voices' => $result['voices'],
+            'grouped' => array_values($grouped_voices),
+            'language_filter' => $language
+        ]);
     }
 
     public function add_admin_menu() {
@@ -459,6 +620,28 @@ class AIVoice_Settings {
                             <td>
                                 <input type="text" name="ai_voice_settings[local_tts_url]" id="local_tts_url" value="<?php echo esc_attr( $options['local_tts_url'] ?? 'http://localhost:6000/synthesize' ); ?>" class="regular-text">
                                 <p class="description">URL of your Edge TTS server (default: http://localhost:6000/synthesize)</p>
+                                
+                                <!-- ✅ NEW: Server Status Indicator -->
+                                <div id="edge_tts_health_status" style="margin-top: 10px; padding: 8px 12px; border-radius: 4px; display: inline-block; font-weight: 600;">
+                                    <span class="spinner is-active" style="float: none; margin: 0 8px 0 0;"></span>
+                                    Checking server...
+                                </div>
+                                
+                                <style>
+                                    #edge_tts_health_status.success {
+                                        background: #d4edda;
+                                        color: #155724;
+                                        border: 1px solid #c3e6cb;
+                                    }
+                                    #edge_tts_health_status.error {
+                                        background: #f8d7da;
+                                        color: #721c24;
+                                        border: 1px solid #f5c6cb;
+                                    }
+                                    #edge_tts_health_status .spinner {
+                                        visibility: visible;
+                                    }
+                                </style>
                             </td>
                         </tr>
                         
