@@ -1,5 +1,7 @@
 <?php
-// If this file is called directly, abort.
+// Complete settings.php with Edge TTS multi-language support
+// Replace your existing settings.php with this file
+
 if ( ! defined( 'WPINC' ) ) {
 	die;
 }
@@ -10,6 +12,9 @@ class AIVoice_Settings {
         add_action( 'admin_menu', [ $this, 'add_admin_menu' ] );
         add_action( 'admin_init', [ $this, 'register_settings' ] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_scripts' ] );
+        
+        // AJAX endpoint to fetch voices from Edge TTS server
+        add_action( 'wp_ajax_ai_voice_fetch_edge_voices', [ $this, 'fetch_edge_voices_ajax' ] );
     }
     
     public function enqueue_admin_scripts($hook) {
@@ -17,6 +22,38 @@ class AIVoice_Settings {
             return;
         }
         wp_enqueue_script('ai-voice-admin-js', AI_VOICE_PLUGIN_URL . 'admin/assets/js/settings.js', ['jquery'], AI_VOICE_VERSION, true);
+        
+        // Add AJAX URL for fetching voices
+        wp_localize_script('ai-voice-admin-js', 'aiVoiceAdmin', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('ai_voice_admin_nonce')
+        ]);
+    }
+    
+    // AJAX handler to fetch voices from Edge TTS server
+    public function fetch_edge_voices_ajax() {
+        check_ajax_referer('ai_voice_admin_nonce', 'nonce');
+        
+        $language = isset($_POST['language']) ? sanitize_text_field($_POST['language']) : '';
+        $settings = get_option('ai_voice_settings');
+        $tts_url = $settings['local_tts_url'] ?? 'http://localhost:6000';
+        
+        // Remove /synthesize if it's there
+        $base_url = str_replace('/synthesize', '', $tts_url);
+        $voices_url = $base_url . '/voices';
+        
+        if (!empty($language)) {
+            $voices_url .= '?language=' . $language;
+        }
+        
+        $response = wp_remote_get($voices_url, ['timeout' => 10]);
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => 'Could not connect to TTS server']);
+        }
+        
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        wp_send_json_success($data);
     }
 
     public function add_admin_menu() {
@@ -303,17 +340,81 @@ class AIVoice_Settings {
                                     <option value="google" <?php selected( $options['default_ai'] ?? 'google', 'google' ); ?>>Google Cloud TTS</option>
                                     <option value="gemini" <?php selected( $options['default_ai'] ?? 'google', 'gemini' ); ?>>Google AI (Gemini)</option>
                                     <option value="openai" <?php selected( $options['default_ai'] ?? 'google', 'openai' ); ?>>OpenAI</option>
-                                    <option value="local" <?php selected( $options['default_ai'] ?? 'google', 'local' ); ?>>Local TTS (Coqui)</option>
+                                    <option value="local" <?php selected( $options['default_ai'] ?? 'google', 'local' ); ?>>Local Edge TTS</option>
                                 </select>
                             </td>
                         </tr>
+                        
+                        <!-- Edge TTS Settings -->
                         <tr class="ai-voice-setting-row" data-service="local">
-                            <th scope="row"><label for="ai_voice_settings[local_tts_url]">Local TTS Server URL</label></th>
+                            <th scope="row"><label for="ai_voice_settings[local_tts_url]">Edge TTS Server URL</label></th>
                             <td>
-                                <input type="text" name="ai_voice_settings[local_tts_url]" value="<?php echo esc_attr( $options['local_tts_url'] ?? 'http://localhost:5000/synthesize' ); ?>" class="regular-text">
-                                <p class="description">URL of your local TTS server (default: http://localhost:5000/synthesize)</p>
+                                <input type="text" name="ai_voice_settings[local_tts_url]" id="local_tts_url" value="<?php echo esc_attr( $options['local_tts_url'] ?? 'http://localhost:6000/synthesize' ); ?>" class="regular-text">
+                                <p class="description">URL of your Edge TTS server (default: http://localhost:6000/synthesize)</p>
                             </td>
                         </tr>
+                        
+                        <tr class="ai-voice-setting-row" data-service="local">
+                            <th scope="row"><label for="ai_voice_settings[edge_language]">Default Language</label></th>
+                            <td>
+                                <select name="ai_voice_settings[edge_language]" id="edge_language" class="regular-text">
+                                    <option value="en" <?php selected( $options['edge_language'] ?? 'en', 'en' ); ?>>English</option>
+                                    <option value="ar" <?php selected( $options['edge_language'] ?? 'en', 'ar' ); ?>>Arabic (العربية)</option>
+                                    <option value="bg" <?php selected( $options['edge_language'] ?? 'en', 'bg' ); ?>>Bulgarian (Български)</option>
+                                    <option value="ca" <?php selected( $options['edge_language'] ?? 'en', 'ca' ); ?>>Catalan (Català)</option>
+                                    <option value="cs" <?php selected( $options['edge_language'] ?? 'en', 'cs' ); ?>>Czech (Čeština)</option>
+                                    <option value="da" <?php selected( $options['edge_language'] ?? 'en', 'da' ); ?>>Danish (Dansk)</option>
+                                    <option value="de" <?php selected( $options['edge_language'] ?? 'en', 'de' ); ?>>German (Deutsch)</option>
+                                    <option value="el" <?php selected( $options['edge_language'] ?? 'en', 'el' ); ?>>Greek (Ελληνικά)</option>
+                                    <option value="es" <?php selected( $options['edge_language'] ?? 'en', 'es' ); ?>>Spanish (Español)</option>
+                                    <option value="fi" <?php selected( $options['edge_language'] ?? 'en', 'fi' ); ?>>Finnish (Suomi)</option>
+                                    <option value="fr" <?php selected( $options['edge_language'] ?? 'en', 'fr' ); ?>>French (Français)</option>
+                                    <option value="he" <?php selected( $options['edge_language'] ?? 'en', 'he' ); ?>>Hebrew (עברית)</option>
+                                    <option value="hi" <?php selected( $options['edge_language'] ?? 'en', 'hi' ); ?>>Hindi (हिन्दी)</option>
+                                    <option value="hr" <?php selected( $options['edge_language'] ?? 'en', 'hr' ); ?>>Croatian (Hrvatski)</option>
+                                    <option value="hu" <?php selected( $options['edge_language'] ?? 'en', 'hu' ); ?>>Hungarian (Magyar)</option>
+                                    <option value="id" <?php selected( $options['edge_language'] ?? 'en', 'id' ); ?>>Indonesian (Bahasa Indonesia)</option>
+                                    <option value="it" <?php selected( $options['edge_language'] ?? 'en', 'it' ); ?>>Italian (Italiano)</option>
+                                    <option value="ja" <?php selected( $options['edge_language'] ?? 'en', 'ja' ); ?>>Japanese (日本語)</option>
+                                    <option value="ko" <?php selected( $options['edge_language'] ?? 'en', 'ko' ); ?>>Korean (한국어)</option>
+                                    <option value="nl" <?php selected( $options['edge_language'] ?? 'en', 'nl' ); ?>>Dutch (Nederlands)</option>
+                                    <option value="no" <?php selected( $options['edge_language'] ?? 'en', 'no' ); ?>>Norwegian (Norsk)</option>
+                                    <option value="pl" <?php selected( $options['edge_language'] ?? 'en', 'pl' ); ?>>Polish (Polski)</option>
+                                    <option value="pt" <?php selected( $options['edge_language'] ?? 'en', 'pt' ); ?>>Portuguese (Português)</option>
+                                    <option value="ro" <?php selected( $options['edge_language'] ?? 'en', 'ro' ); ?>>Romanian (Română)</option>
+                                    <option value="ru" <?php selected( $options['edge_language'] ?? 'en', 'ru' ); ?>>Russian (Русский)</option>
+                                    <option value="sk" <?php selected( $options['edge_language'] ?? 'en', 'sk' ); ?>>Slovak (Slovenčina)</option>
+                                    <option value="sl" <?php selected( $options['edge_language'] ?? 'en', 'sl' ); ?>>Slovenian (Slovenščina)</option>
+                                    <option value="sv" <?php selected( $options['edge_language'] ?? 'en', 'sv' ); ?>>Swedish (Svenska)</option>
+                                    <option value="th" <?php selected( $options['edge_language'] ?? 'en', 'th' ); ?>>Thai (ไทย)</option>
+                                    <option value="tr" <?php selected( $options['edge_language'] ?? 'en', 'tr' ); ?>>Turkish (Türkçe)</option>
+                                    <option value="uk" <?php selected( $options['edge_language'] ?? 'en', 'uk' ); ?>>Ukrainian (Українська)</option>
+                                    <option value="vi" <?php selected( $options['edge_language'] ?? 'en', 'vi' ); ?>>Vietnamese (Tiếng Việt)</option>
+                                    <option value="zh" <?php selected( $options['edge_language'] ?? 'en', 'zh' ); ?>>Chinese (中文)</option>
+                                </select>
+                                <p class="description">Select the default language for Edge TTS voices</p>
+                            </td>
+                        </tr>
+                        
+                        <tr class="ai-voice-setting-row" data-service="local">
+                            <th scope="row"><label for="ai_voice_settings[edge_voice]">Default Voice</label></th>
+                            <td>
+                                <select name="ai_voice_settings[edge_voice]" id="edge_voice" class="regular-text">
+                                    <option value="en-US-JennyNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-JennyNeural' ); ?>>Jenny (Female, US)</option>
+                                    <option value="en-US-GuyNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-GuyNeural' ); ?>>Guy (Male, US)</option>
+                                    <option value="en-US-AriaNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'en-US-AriaNeural' ); ?>>Aria (Female, US)</option>
+                                    <option value="el-GR-AthinaNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'el-GR-AthinaNeural' ); ?>>Athina (Female, Greek)</option>
+                                    <option value="el-GR-NestorasNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'el-GR-NestorasNeural' ); ?>>Nestoras (Male, Greek)</option>
+                                    <option value="ar-SA-ZariyahNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'ar-SA-ZariyahNeural' ); ?>>Zariyah (Female, Arabic)</option>
+                                    <option value="ar-SA-HamedNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'ar-SA-HamedNeural' ); ?>>Hamed (Male, Arabic)</option>
+                                    <option value="tr-TR-EmelNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'tr-TR-EmelNeural' ); ?>>Emel (Female, Turkish)</option>
+                                    <option value="tr-TR-AhmetNeural" <?php selected( $options['edge_voice'] ?? 'en-US-JennyNeural', 'tr-TR-AhmetNeural' ); ?>>Ahmet (Male, Turkish)</option>
+                                </select>
+                                <p class="description">Select the default voice. Change language above to see voices for that language.</p>
+                                <button type="button" id="fetch_edge_voices" class="button" style="margin-top: 10px;">Refresh Voices from Server</button>
+                            </td>
+                        </tr>
+                        
                         <tr class="ai-voice-setting-row" data-service="gemini">
                             <th scope="row"><label for="ai_voice_settings[gemini_tone]">Default Gemini Tone</label></th>
                             <td>
@@ -411,7 +512,6 @@ class AIVoice_Settings {
             </form>
 
             <?php
-            // ADD THE PURGE BOX RIGHT HERE, below the settings form
             if ( function_exists( 'ai_voice_render_purge_box' ) ) {
                 ai_voice_render_purge_box();
             }

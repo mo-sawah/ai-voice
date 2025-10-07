@@ -41,9 +41,16 @@ class AIVoice_Public {
         return false;
     }
     
-    // Local TTS method
     private function generate_local_tts_audio($text_chunk) {
-        $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:5000/synthesize';
+        $local_tts_url = $this->settings['local_tts_url'] ?? 'http://localhost:6000/synthesize';
+        
+        // Get the voice setting (check post meta first, then global settings)
+        $post_id = get_the_ID();
+        $edge_voice = get_post_meta($post_id, '_ai_voice_edge_voice', true);
+        
+        if (empty($edge_voice) || $edge_voice === 'default') {
+            $edge_voice = $this->settings['edge_voice'] ?? 'en-US-JennyNeural';
+        }
         
         $args = [
             'timeout' => 120,
@@ -52,21 +59,21 @@ class AIVoice_Public {
             ],
             'body' => json_encode([
                 'text' => $text_chunk,
-                'voice' => 'default'
+                'voice' => $edge_voice  // Send the voice to the server
             ])
         ];
         
         $response = wp_remote_post($local_tts_url, $args);
         
         if (is_wp_error($response)) {
-            return new WP_Error('local_tts_request_failed', 'Local TTS request failed: ' . $response->get_error_message());
+            return new WP_Error('local_tts_request_failed', 'Edge TTS request failed: ' . $response->get_error_message());
         }
         
         $code = wp_remote_retrieve_response_code($response);
         $data = json_decode(wp_remote_retrieve_body($response), true);
         
         if ($code !== 200) {
-            $msg = 'Local TTS API Error (Code: ' . $code . ')';
+            $msg = 'Edge TTS API Error (Code: ' . $code . ')';
             if (isset($data['error'])) {
                 $msg .= ': ' . $data['error'];
             }
@@ -74,18 +81,18 @@ class AIVoice_Public {
         }
         
         if (!isset($data['audioContent'])) {
-            return new WP_Error('local_tts_no_audio', 'Local TTS API did not return audio content.');
+            return new WP_Error('local_tts_no_audio', 'Edge TTS API did not return audio content.');
         }
         
         // Decode base64 audio data
         $audio_data = base64_decode($data['audioContent']);
         
         if (empty($audio_data)) {
-            return new WP_Error('local_tts_invalid_audio', 'Local TTS returned invalid audio data.');
+            return new WP_Error('local_tts_invalid_audio', 'Edge TTS returned invalid audio data.');
         }
         
         // Create temporary file
-        $temp_file = wp_tempnam('ai-voice-local-');
+        $temp_file = wp_tempnam('ai-voice-edge-');
         if (file_put_contents($temp_file, $audio_data) === false) {
             return new WP_Error('temp_file_failed', 'Failed to write temporary audio file.');
         }

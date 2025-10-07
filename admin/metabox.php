@@ -1,5 +1,7 @@
 <?php
-// If this file is called directly, abort.
+// Complete metabox.php with Edge TTS multi-language support
+// Replace your existing metabox.php with this file
+
 if ( ! defined( 'WPINC' ) ) {
 	die;
 }
@@ -38,6 +40,11 @@ class AIVoice_Metabox {
         $google_voice = get_post_meta( $post->ID, '_ai_voice_google_voice', true );
         $gemini_voice = get_post_meta( $post->ID, '_ai_voice_gemini_voice', true );
         $openai_voice = get_post_meta( $post->ID, '_ai_voice_openai_voice', true );
+        
+        // Edge TTS settings
+        $edge_language = get_post_meta( $post->ID, '_ai_voice_edge_language', true );
+        $edge_voice = get_post_meta( $post->ID, '_ai_voice_edge_voice', true );
+        
         $theme = get_post_meta( $post->ID, '_ai_voice_theme', true );
         ?>
         <p>
@@ -55,9 +62,90 @@ class AIVoice_Metabox {
                 <option value="google" <?php selected( $ai_service, 'google' ); ?>>Google Cloud TTS</option>
                 <option value="gemini" <?php selected( $ai_service, 'gemini' ); ?>>Google AI (Gemini)</option>
                 <option value="openai" <?php selected( $ai_service, 'openai' ); ?>>OpenAI</option>
-                <option value="local" <?php selected( $ai_service, 'local' ); ?>>Local TTS (Coqui)</option>
+                <option value="local" <?php selected( $ai_service, 'local' ); ?>>Local Edge TTS</option>
             </select>
         </p>
+        
+        <!-- Edge TTS Language & Voice -->
+        <p class="ai-voice-setting-row-postbox" data-service="local">
+            <label for="ai_voice_edge_language"><strong>Edge TTS Language</strong></label><br>
+            <select name="ai_voice_edge_language" id="ai_voice_edge_language" style="width:100%;">
+                <option value="default" <?php selected( $edge_language, 'default' ); ?>>Use Global Setting</option>
+                <option value="en" <?php selected( $edge_language, 'en' ); ?>>English</option>
+                <option value="ar" <?php selected( $edge_language, 'ar' ); ?>>Arabic (العربية)</option>
+                <option value="bg" <?php selected( $edge_language, 'bg' ); ?>>Bulgarian (Български)</option>
+                <option value="ca" <?php selected( $edge_language, 'ca' ); ?>>Catalan (Català)</option>
+                <option value="cs" <?php selected( $edge_language, 'cs' ); ?>>Czech (Čeština)</option>
+                <option value="da" <?php selected( $edge_language, 'da' ); ?>>Danish (Dansk)</option>
+                <option value="de" <?php selected( $edge_language, 'de' ); ?>>German (Deutsch)</option>
+                <option value="el" <?php selected( $edge_language, 'el' ); ?>>Greek (Ελληνικά)</option>
+                <option value="es" <?php selected( $edge_language, 'es' ); ?>>Spanish (Español)</option>
+                <option value="fi" <?php selected( $edge_language, 'fi' ); ?>>Finnish (Suomi)</option>
+                <option value="fr" <?php selected( $edge_language, 'fr' ); ?>>French (Français)</option>
+                <option value="he" <?php selected( $edge_language, 'he' ); ?>>Hebrew (עברית)</option>
+                <option value="hi" <?php selected( $edge_language, 'hi' ); ?>>Hindi (हिन्दी)</option>
+                <option value="hr" <?php selected( $edge_language, 'hr' ); ?>>Croatian (Hrvatski)</option>
+                <option value="hu" <?php selected( $edge_language, 'hu' ); ?>>Hungarian (Magyar)</option>
+                <option value="id" <?php selected( $edge_language, 'id' ); ?>>Indonesian (Bahasa Indonesia)</option>
+                <option value="it" <?php selected( $edge_language, 'it' ); ?>>Italian (Italiano)</option>
+                <option value="ja" <?php selected( $edge_language, 'ja' ); ?>>Japanese (日本語)</option>
+                <option value="ko" <?php selected( $edge_language, 'ko' ); ?>>Korean (한국어)</option>
+                <option value="nl" <?php selected( $edge_language, 'nl' ); ?>>Dutch (Nederlands)</option>
+                <option value="no" <?php selected( $edge_language, 'no' ); ?>>Norwegian (Norsk)</option>
+                <option value="pl" <?php selected( $edge_language, 'pl' ); ?>>Polish (Polski)</option>
+                <option value="pt" <?php selected( $edge_language, 'pt' ); ?>>Portuguese (Português)</option>
+                <option value="ro" <?php selected( $edge_language, 'ro' ); ?>>Romanian (Română)</option>
+                <option value="ru" <?php selected( $edge_language, 'ru' ); ?>>Russian (Русский)</option>
+                <option value="sk" <?php selected( $edge_language, 'sk' ); ?>>Slovak (Slovenčina)</option>
+                <option value="sl" <?php selected( $edge_language, 'sl' ); ?>>Slovenian (Slovenščina)</option>
+                <option value="sv" <?php selected( $edge_language, 'sv' ); ?>>Swedish (Svenska)</option>
+                <option value="th" <?php selected( $edge_language, 'th' ); ?>>Thai (ไทย)</option>
+                <option value="tr" <?php selected( $edge_language, 'tr' ); ?>>Turkish (Türkçe)</option>
+                <option value="uk" <?php selected( $edge_language, 'uk' ); ?>>Ukrainian (Українська)</option>
+                <option value="vi" <?php selected( $edge_language, 'vi' ); ?>>Vietnamese (Tiếng Việt)</option>
+                <option value="zh" <?php selected( $edge_language, 'zh' ); ?>>Chinese (中文)</option>
+            </select>
+        </p>
+        
+        <p class="ai-voice-setting-row-postbox" data-service="local">
+            <label for="ai_voice_edge_voice"><strong>Edge TTS Voice</strong></label><br>
+            <select name="ai_voice_edge_voice" id="ai_voice_edge_voice" style="width:100%;">
+                <option value="default" <?php selected( $edge_voice, 'default' ); ?>>Use Global Setting</option>
+                <option value="en-US-JennyNeural" <?php selected( $edge_voice, 'en-US-JennyNeural' ); ?>>Jenny (Female, US)</option>
+                <option value="en-US-GuyNeural" <?php selected( $edge_voice, 'en-US-GuyNeural' ); ?>>Guy (Male, US)</option>
+                <option value="en-US-AriaNeural" <?php selected( $edge_voice, 'en-US-AriaNeural' ); ?>>Aria (Female, US)</option>
+                <option value="en-GB-SoniaNeural" <?php selected( $edge_voice, 'en-GB-SoniaNeural' ); ?>>Sonia (Female, UK)</option>
+                <option value="en-GB-RyanNeural" <?php selected( $edge_voice, 'en-GB-RyanNeural' ); ?>>Ryan (Male, UK)</option>
+                <option value="el-GR-AthinaNeural" <?php selected( $edge_voice, 'el-GR-AthinaNeural' ); ?>>Athina (Female, Greek)</option>
+                <option value="el-GR-NestorasNeural" <?php selected( $edge_voice, 'el-GR-NestorasNeural' ); ?>>Nestoras (Male, Greek)</option>
+                <option value="ar-SA-ZariyahNeural" <?php selected( $edge_voice, 'ar-SA-ZariyahNeural' ); ?>>Zariyah (Female, Arabic)</option>
+                <option value="ar-SA-HamedNeural" <?php selected( $edge_voice, 'ar-SA-HamedNeural' ); ?>>Hamed (Male, Arabic)</option>
+                <option value="tr-TR-EmelNeural" <?php selected( $edge_voice, 'tr-TR-EmelNeural' ); ?>>Emel (Female, Turkish)</option>
+                <option value="tr-TR-AhmetNeural" <?php selected( $edge_voice, 'tr-TR-AhmetNeural' ); ?>>Ahmet (Male, Turkish)</option>
+                <option value="es-ES-ElviraNeural" <?php selected( $edge_voice, 'es-ES-ElviraNeural' ); ?>>Elvira (Female, Spanish)</option>
+                <option value="es-ES-AlvaroNeural" <?php selected( $edge_voice, 'es-ES-AlvaroNeural' ); ?>>Alvaro (Male, Spanish)</option>
+                <option value="fr-FR-DeniseNeural" <?php selected( $edge_voice, 'fr-FR-DeniseNeural' ); ?>>Denise (Female, French)</option>
+                <option value="fr-FR-HenriNeural" <?php selected( $edge_voice, 'fr-FR-HenriNeural' ); ?>>Henri (Male, French)</option>
+                <option value="de-DE-KatjaNeural" <?php selected( $edge_voice, 'de-DE-KatjaNeural' ); ?>>Katja (Female, German)</option>
+                <option value="de-DE-ConradNeural" <?php selected( $edge_voice, 'de-DE-ConradNeural' ); ?>>Conrad (Male, German)</option>
+                <option value="it-IT-ElsaNeural" <?php selected( $edge_voice, 'it-IT-ElsaNeural' ); ?>>Elsa (Female, Italian)</option>
+                <option value="it-IT-DiegoNeural" <?php selected( $edge_voice, 'it-IT-DiegoNeural' ); ?>>Diego (Male, Italian)</option>
+                <option value="pt-BR-FranciscaNeural" <?php selected( $edge_voice, 'pt-BR-FranciscaNeural' ); ?>>Francisca (Female, Brazilian)</option>
+                <option value="pt-BR-AntonioNeural" <?php selected( $edge_voice, 'pt-BR-AntonioNeural' ); ?>>Antonio (Male, Brazilian)</option>
+                <option value="ru-RU-SvetlanaNeural" <?php selected( $edge_voice, 'ru-RU-SvetlanaNeural' ); ?>>Svetlana (Female, Russian)</option>
+                <option value="ru-RU-DmitryNeural" <?php selected( $edge_voice, 'ru-RU-DmitryNeural' ); ?>>Dmitry (Male, Russian)</option>
+                <option value="zh-CN-XiaoxiaoNeural" <?php selected( $edge_voice, 'zh-CN-XiaoxiaoNeural' ); ?>>Xiaoxiao (Female, Chinese)</option>
+                <option value="zh-CN-YunxiNeural" <?php selected( $edge_voice, 'zh-CN-YunxiNeural' ); ?>>Yunxi (Male, Chinese)</option>
+                <option value="ja-JP-NanamiNeural" <?php selected( $edge_voice, 'ja-JP-NanamiNeural' ); ?>>Nanami (Female, Japanese)</option>
+                <option value="ja-JP-KeitaNeural" <?php selected( $edge_voice, 'ja-JP-KeitaNeural' ); ?>>Keita (Male, Japanese)</option>
+                <option value="ko-KR-SunHiNeural" <?php selected( $edge_voice, 'ko-KR-SunHiNeural' ); ?>>SunHi (Female, Korean)</option>
+                <option value="ko-KR-InJoonNeural" <?php selected( $edge_voice, 'ko-KR-InJoonNeural' ); ?>>InJoon (Male, Korean)</option>
+                <option value="hi-IN-SwaraNeural" <?php selected( $edge_voice, 'hi-IN-SwaraNeural' ); ?>>Swara (Female, Hindi)</option>
+                <option value="hi-IN-MadhurNeural" <?php selected( $edge_voice, 'hi-IN-MadhurNeural' ); ?>>Madhur (Male, Hindi)</option>
+            </select>
+        </p>
+        
+        <!-- Gemini Settings -->
         <p class="ai-voice-setting-row-postbox" data-service="gemini">
             <label for="ai_voice_gemini_tone"><strong>Gemini Tone</strong></label><br>
             <select name="ai_voice_gemini_tone" id="ai_voice_gemini_tone" style="width:100%;">
@@ -68,6 +156,8 @@ class AIVoice_Metabox {
                 <option value="calm" <?php selected( $gemini_tone, 'calm' ); ?>>Calm & Soothing</option>
             </select>
         </p>
+        
+        <!-- Google Voice Settings -->
          <p class="ai-voice-setting-row-postbox" data-service="google">
             <label for="ai_voice_google_voice"><strong>Google Voice</strong></label><br>
             <select name="ai_voice_google_voice" id="ai_voice_google_voice" style="width:100%;">
@@ -76,24 +166,44 @@ class AIVoice_Metabox {
                     <option value="en-US-Studio-M" <?php selected($google_voice, 'en-US-Studio-M'); ?>>Male</option>
                     <option value="en-US-Studio-O" <?php selected($google_voice, 'en-US-Studio-O'); ?>>Female</option>
                 </optgroup>
+                <optgroup label="English (US) - Neural2">
+                    <option value="en-US-Neural2-A" <?php selected($google_voice, 'en-US-Neural2-A'); ?>>Male A</option>
+                    <option value="en-US-Neural2-C" <?php selected($google_voice, 'en-US-Neural2-C'); ?>>Female C</option>
+                    <option value="en-US-Neural2-D" <?php selected($google_voice, 'en-US-Neural2-D'); ?>>Male D</option>
+                    <option value="en-US-Neural2-F" <?php selected($google_voice, 'en-US-Neural2-F'); ?>>Female F</option>
+                    <option value="en-US-Neural2-J" <?php selected($google_voice, 'en-US-Neural2-J'); ?>>Male J</option>
+                </optgroup>
             </select>
         </p>
+        
+        <!-- Gemini Voice Settings -->
         <p class="ai-voice-setting-row-postbox" data-service="gemini">
             <label for="ai_voice_gemini_voice"><strong>Gemini Voice</strong></label><br>
             <select name="ai_voice_gemini_voice" id="ai_voice_gemini_voice" style="width:100%;">
                 <option value="default" <?php selected( $gemini_voice, 'default' ); ?>>Use Global Setting</option>
                 <option value="Kore" <?php selected( $gemini_voice, 'Kore' ); ?>>Kore (Firm)</option>
                 <option value="Puck" <?php selected( $gemini_voice, 'Puck' ); ?>>Puck (Upbeat)</option>
+                <option value="Charon" <?php selected( $gemini_voice, 'Charon' ); ?>>Charon (Informative)</option>
+                <option value="Leda" <?php selected( $gemini_voice, 'Leda' ); ?>>Leda (Youthful)</option>
+                <option value="Enceladus" <?php selected( $gemini_voice, 'Enceladus' ); ?>>Enceladus (Breathy)</option>
             </select>
         </p>
+        
+        <!-- OpenAI Voice Settings -->
         <p class="ai-voice-setting-row-postbox" data-service="openai">
             <label for="ai_voice_openai_voice"><strong>OpenAI Voice</strong></label><br>
             <select name="ai_voice_openai_voice" id="ai_voice_openai_voice" style="width:100%;">
                 <option value="default" <?php selected( $openai_voice, 'default' ); ?>>Use Global Setting</option>
                 <option value="alloy" <?php selected( $openai_voice, 'alloy' ); ?>>Alloy</option>
+                <option value="echo" <?php selected( $openai_voice, 'echo' ); ?>>Echo</option>
+                <option value="fable" <?php selected( $openai_voice, 'fable' ); ?>>Fable</option>
+                <option value="onyx" <?php selected( $openai_voice, 'onyx' ); ?>>Onyx</option>
                 <option value="nova" <?php selected( $openai_voice, 'nova' ); ?>>Nova</option>
+                <option value="shimmer" <?php selected( $openai_voice, 'shimmer' ); ?>>Shimmer</option>
             </select>
         </p>
+        
+        <!-- Theme Settings -->
         <p>
             <label for="ai_voice_theme"><strong>Player Theme</strong></label><br>
             <select name="ai_voice_theme" id="ai_voice_theme" style="width:100%;">
@@ -111,7 +221,18 @@ class AIVoice_Metabox {
         if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) return;
         if ( ! current_user_can( 'edit_post', $post_id ) ) return;
 
-        $fields = [ 'ai_voice_status', 'ai_voice_ai_service', 'ai_voice_gemini_tone', 'ai_voice_google_voice', 'ai_voice_gemini_voice', 'ai_voice_openai_voice', 'ai_voice_theme' ];
+        $fields = [
+            'ai_voice_status',
+            'ai_voice_ai_service',
+            'ai_voice_gemini_tone',
+            'ai_voice_google_voice',
+            'ai_voice_gemini_voice',
+            'ai_voice_openai_voice',
+            'ai_voice_edge_language',  // NEW
+            'ai_voice_edge_voice',     // NEW
+            'ai_voice_theme'
+        ];
+        
         foreach ($fields as $field) {
             if ( array_key_exists( $field, $_POST ) ) {
                 update_post_meta( $post_id, '_' . $field, sanitize_text_field( $_POST[ $field ] ) );
@@ -127,4 +248,3 @@ class AIVoice_Metabox {
         }
     }
 }
-
