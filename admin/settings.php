@@ -8,6 +8,28 @@ if ( ! defined( 'WPINC' ) ) {
 
 class AIVoice_Settings {
 
+    public function enqueue_admin_scripts($hook) {
+        // Enqueue on post edit pages
+        if (in_array($hook, ['post.php', 'post-new.php'])) {
+            wp_enqueue_script('ai-voice-admin-js', AI_VOICE_PLUGIN_URL . 'admin/assets/js/settings.js', ['jquery'], AI_VOICE_VERSION, true);
+            
+            wp_localize_script('ai-voice-admin-js', 'aiVoiceAdmin', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('ai_voice_admin_nonce')
+            ]);
+        }
+        
+        // NEW: Enqueue on settings page
+        if ($hook === 'settings_page_ai-voice') {
+            wp_enqueue_script('ai-voice-admin-js', AI_VOICE_PLUGIN_URL . 'admin/assets/js/settings.js', ['jquery'], AI_VOICE_VERSION, true);
+            
+            wp_localize_script('ai-voice-admin-js', 'aiVoiceAdmin', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('ai_voice_admin_nonce')
+            ]);
+        }
+    }
+
     /**
      * Get voices from Edge TTS server with caching
      */
