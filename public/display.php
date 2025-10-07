@@ -193,6 +193,15 @@ class AIVoice_Public {
         // Summary generation
         add_action( 'wp_ajax_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
         add_action( 'wp_ajax_nopriv_ai_voice_generate_summary', [ $this, 'handle_generate_summary_ajax' ] );
+
+        // 🆕 NEW FEATURES
+        // Translate article
+        add_action( 'wp_ajax_ai_voice_translate_text', [ $this, 'handle_translate_ajax' ] );
+        add_action( 'wp_ajax_nopriv_ai_voice_translate_text', [ $this, 'handle_translate_ajax' ] );
+
+        // AI Chat
+        add_action( 'wp_ajax_ai_voice_ask_ai', [ $this, 'handle_ask_ai_ajax' ] );
+        add_action( 'wp_ajax_nopriv_ai_voice_ask_ai', [ $this, 'handle_ask_ai_ajax' ] );
     }
 
     public function enqueue_assets() {
@@ -204,7 +213,7 @@ class AIVoice_Public {
             AI_VOICE_VERSION
         );
 
-        // Register JS (we’ll enqueue it later only on pages with the player)
+        // Register JS (we'll enqueue it later only on pages with the player)
         wp_register_script(
             'ai-voice-player-js',
             AI_VOICE_PLUGIN_URL . 'public/assets/js/player.js',
@@ -239,6 +248,10 @@ class AIVoice_Public {
             'toggle_theme_label' => $this->settings['text_toggle_theme_label'] ?? 'Toggle Theme',
             'close_summary_label' => $this->settings['text_close_summary_label'] ?? 'Close Summary',
             'key_takeaways' => $this->settings['text_key_takeaways'] ?? 'Key Takeaways',
+            'translate_title' => $this->settings['text_translate_title'] ?? 'Translate Article',
+            'read_along_title' => $this->settings['text_read_along_title'] ?? 'Read Along',
+            'ai_assistant_name' => $this->settings['text_ai_assistant_name'] ?? 'AI Assistant',
+            'ask_ai_label' => $this->settings['text_ask_ai_label'] ?? 'Ask AI',
         ];
 
         ob_start();
@@ -323,6 +336,493 @@ class AIVoice_Public {
 
         update_post_meta($post_id, '_ai_voice_summary_' . $content_hash, $summary_result);
         wp_send_json_success(['summary' => $summary_result]);
+    }
+
+    /**
+     * 🆕 NEW: Handle article translation
+     */
+    public function handle_translate_ajax() {
+        check_ajax_referer('ai_voice_nonce', 'nonce');
+
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        $text = isset($_POST['text']) ? sanitize_textarea_field($_POST['text']) : '';
+        $target_lang = isset($_POST['target_lang']) ? sanitize_text_field($_POST['target_lang']) : 'en';
+
+        if (!$post_id || empty($text)) {
+            wp_send_json_error(['message' => 'Invalid parameters']);
+        }
+
+        // Check cache first
+        $cache_key = md5($text . $target_lang);
+        $cached_translation = get_transient('ai_voice_translation_' . $cache_key);
+        
+        if ($cached_translation !== false) {
+            wp_send_json_success(['translated_text' => $cached_translation]);
+            return;
+        }
+
+        // Use the same AI service as summary (OpenRouter or ChatGPT)
+        $summary_api = $this->settings['summary_api'] ?? 'openrouter';
+        
+        if ($summary_api === 'openrouter') {
+            $result = $this->translate_with_openrouter($text, $target_lang);
+        } else if ($summary_api === 'chatgpt') {
+            $result = $this->translate_with_chatgpt($text, $target_lang);
+        } else if ($summary_api === 'local_ollama') {
+            $result = $this->translate_with_local_ollama($text, $target_lang);
+        } else {
+            wp_send_json_error(['message' => 'No translation API configured']);
+        }
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        // Cache for 1 day
+        set_transient('ai_voice_translation_' . $cache_key, $result, DAY_IN_SECONDS);
+
+        wp_send_json_success(['translated_text' => $result]);
+    }
+
+    /**
+     * 🆕 NEW: Handle AI chat about article
+     */
+    public function handle_ask_ai_ajax() {
+        check_ajax_referer('ai_voice_nonce', 'nonce');
+
+        $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+        $message = isset($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
+
+        if (!$post_id || empty($message)) {
+            wp_send_json_error(['message' => 'Invalid parameters']);
+        }
+
+        // Get article content for context
+        $article_text = $this->get_post_plain_text($post_id);
+        $article_text = $this->strip_leading_parenthetical_dateline($article_text);
+        
+        // Limit article text to avoid token limits
+        if (strlen($article_text) > 3000) {
+            $article_text = substr($article_text, 0, 3000) . '...';
+        }
+
+        // Use the same AI service as summary
+        $summary_api = $this->settings['summary_api'] ?? 'openrouter';
+        
+        if ($summary_api === 'openrouter') {
+            $result = $this->chat_with_openrouter($article_text, $message);
+        } else if ($summary_api === 'chatgpt') {
+            $result = $this->chat_with_chatgpt($article_text, $message);
+        } else if ($summary_api === 'local_ollama') {
+            $result = $this->chat_with_local_ollama($article_text, $message);
+        } else {
+            wp_send_json_error(['message' => 'No AI chat API configured']);
+        }
+
+        if (is_wp_error($result)) {
+            wp_send_json_error(['message' => $result->get_error_message()]);
+        }
+
+        wp_send_json_success(['reply' => $result]);
+    }
+
+    /**
+     * 🆕 Translate with OpenRouter
+     */
+    private function translate_with_openrouter($text, $target_lang) {
+        $api_key = $this->settings['openrouter_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'OpenRouter API key not configured.');
+        }
+
+        $lang_names = [
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'de' => 'German',
+            'ar' => 'Arabic',
+            'zh-CN' => 'Simplified Chinese',
+            'ja' => 'Japanese',
+            'ru' => 'Russian',
+            'pt' => 'Portuguese',
+            'it' => 'Italian',
+            'ko' => 'Korean',
+            'nl' => 'Dutch',
+            'tr' => 'Turkish',
+            'pl' => 'Polish',
+            'hi' => 'Hindi',
+        ];
+
+        $target_language = $lang_names[$target_lang] ?? 'English';
+        
+        $model = $this->settings['summary_model'] ?? 'x-ai/grok-2-1212:free';
+        $api_url = 'https://openrouter.ai/api/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You are a professional translator. Translate the following text to {$target_language}. Maintain the original formatting, tone, and meaning. Only return the translated text, nothing else."
+            ],
+            [
+                'role' => 'user',
+                'content' => $text
+            ]
+        ];
+
+        $args = [
+            'timeout' => 60,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+                'HTTP-Referer'  => home_url(),
+                'X-Title'       => get_bloginfo('name')
+            ],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 2000,
+                'temperature' => 0.3
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('translation_failed', 'Translation request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Translation API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('translation_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('translation_no_content', 'No translation returned.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
+    }
+
+    /**
+     * 🆕 Translate with ChatGPT
+     */
+    private function translate_with_chatgpt($text, $target_lang) {
+        $api_key = $this->settings['chatgpt_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'ChatGPT API key not configured.');
+        }
+
+        $lang_names = [
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'de' => 'German',
+            'ar' => 'Arabic',
+            'zh-CN' => 'Simplified Chinese',
+            'ja' => 'Japanese',
+            'ru' => 'Russian',
+            'pt' => 'Portuguese',
+            'it' => 'Italian',
+            'ko' => 'Korean',
+            'nl' => 'Dutch',
+            'tr' => 'Turkish',
+            'pl' => 'Polish',
+            'hi' => 'Hindi',
+        ];
+
+        $target_language = $lang_names[$target_lang] ?? 'English';
+        $model = $this->settings['chatgpt_model'] ?? 'gpt-3.5-turbo';
+        
+        $api_url = 'https://api.openai.com/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You are a professional translator. Translate to {$target_language}. Only return the translated text."
+            ],
+            [
+                'role' => 'user',
+                'content' => $text
+            ]
+        ];
+
+        $args = [
+            'timeout' => 45,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 2000,
+                'temperature' => 0.3
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('translation_failed', 'Translation request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Translation API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('translation_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('translation_no_content', 'No translation returned.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
+    }
+
+    /**
+     * 🆕 Translate with Local Ollama
+     */
+    private function translate_with_local_ollama($text, $target_lang) {
+        $api_url = $this->settings['local_ollama_url'] ?? 'http://localhost:5001/v1/chat/completions';
+        $model = $this->settings['local_ollama_model'] ?? 'qwen2.5:14b';
+
+        $lang_names = [
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'de' => 'German',
+            'ar' => 'Arabic',
+            'zh-CN' => 'Simplified Chinese',
+            'ja' => 'Japanese',
+            'ru' => 'Russian',
+            'pt' => 'Portuguese',
+            'it' => 'Italian',
+            'ko' => 'Korean',
+            'nl' => 'Dutch',
+            'tr' => 'Turkish',
+            'pl' => 'Polish',
+            'hi' => 'Hindi',
+        ];
+
+        $target_language = $lang_names[$target_lang] ?? 'English';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "Translate the following text to {$target_language}. Only return the translation."
+            ],
+            [
+                'role' => 'user',
+                'content' => $text
+            ]
+        ];
+
+        $args = [
+            'timeout' => 180,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 2000,
+                'temperature' => 0.3
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('translation_failed', 'Translation request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Translation API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('translation_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('translation_no_content', 'No translation returned.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
+    }
+
+    /**
+     * 🆕 Chat with OpenRouter
+     */
+    private function chat_with_openrouter($article_text, $user_message) {
+        $api_key = $this->settings['openrouter_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'OpenRouter API key not configured.');
+        }
+
+        $model = $this->settings['summary_model'] ?? 'x-ai/grok-2-1212:free';
+        $api_url = 'https://openrouter.ai/api/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You are a helpful AI assistant. Answer questions about the following article accurately and concisely. Be conversational and friendly.\n\nArticle content:\n{$article_text}"
+            ],
+            [
+                'role' => 'user',
+                'content' => $user_message
+            ]
+        ];
+
+        $args = [
+            'timeout' => 45,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type'  => 'application/json',
+                'HTTP-Referer'  => home_url(),
+                'X-Title'       => get_bloginfo('name')
+            ],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 500,
+                'temperature' => 0.7
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('chat_failed', 'Chat request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Chat API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('chat_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('chat_no_content', 'No response from AI.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
+    }
+
+    /**
+     * 🆕 Chat with ChatGPT
+     */
+    private function chat_with_chatgpt($article_text, $user_message) {
+        $api_key = $this->settings['chatgpt_api_key'] ?? '';
+        if (empty($api_key)) {
+            return new WP_Error('no_api_key', 'ChatGPT API key not configured.');
+        }
+
+        $model = $this->settings['chatgpt_model'] ?? 'gpt-3.5-turbo';
+        $api_url = 'https://api.openai.com/v1/chat/completions';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "You are a helpful assistant. Answer questions about this article:\n\n{$article_text}"
+            ],
+            [
+                'role' => 'user',
+                'content' => $user_message
+            ]
+        ];
+
+        $args = [
+            'timeout' => 45,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json'
+            ],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 500,
+                'temperature' => 0.7
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('chat_failed', 'Chat request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Chat API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('chat_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('chat_no_content', 'No response from AI.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
+    }
+
+    /**
+     * 🆕 Chat with Local Ollama
+     */
+    private function chat_with_local_ollama($article_text, $user_message) {
+        $api_url = $this->settings['local_ollama_url'] ?? 'http://localhost:5001/v1/chat/completions';
+        $model = $this->settings['local_ollama_model'] ?? 'qwen2.5:14b';
+        
+        $messages = [
+            [
+                'role' => 'system',
+                'content' => "Answer questions about this article:\n\n{$article_text}"
+            ],
+            [
+                'role' => 'user',
+                'content' => $user_message
+            ]
+        ];
+
+        $args = [
+            'timeout' => 180,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => json_encode([
+                'model' => $model,
+                'messages' => $messages,
+                'max_tokens' => 500,
+                'temperature' => 0.7
+            ])
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+        
+        if (is_wp_error($response)) {
+            return new WP_Error('chat_failed', 'Chat request failed: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        
+        if ($code !== 200) {
+            $msg = 'Chat API Error (Code: '.$code.')';
+            if (isset($data['error']['message'])) $msg .= ': ' . $data['error']['message'];
+            return new WP_Error('chat_api_error', $msg);
+        }
+
+        if (!isset($data['choices'][0]['message']['content'])) {
+            return new WP_Error('chat_no_content', 'No response from AI.');
+        }
+
+        return trim($data['choices'][0]['message']['content']);
     }
 
     // Build streaming URL (admin-ajax) to serve MP3 with proper Range support

@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const summarySection = wrapper.querySelector("#ai-voice-summary-section");
   const summaryContent = wrapper.querySelector("#ai-voice-summary-content");
   const summaryClose = wrapper.querySelector("#ai-voice-summary-close");
+
   const playPauseBtn = wrapper.querySelector("#ai-voice-play-pause-btn");
   const playIcon = wrapper.querySelector("#ai-voice-play-icon");
   const pauseIcon = wrapper.querySelector("#ai-voice-pause-icon");
@@ -18,52 +19,40 @@ document.addEventListener("DOMContentLoaded", () => {
   const progressBar = wrapper.querySelector("#ai-voice-progress-bar");
   const currentTimeEl = wrapper.querySelector("#ai-voice-current-time");
   const totalTimeEl = wrapper.querySelector("#ai-voice-total-time");
-  const themeToggle = wrapper.querySelector("#ai-voice-theme-toggle");
-  const sunIcon = wrapper.querySelector("#ai-voice-sun-icon");
-  const moonIcon = wrapper.querySelector("#ai-voice-moon-icon");
-  const speedBtn = wrapper.querySelector("#ai-voice-speed-btn");
-  const voiceBtn = wrapper.querySelector("#ai-voice-voice-btn");
   const aiLogoContainer = wrapper.querySelector("#ai-voice-logo-container");
   const articleTitleEl = wrapper.querySelector("#ai-voice-article-title");
-  const speedModal = wrapper.querySelector("#ai-voice-speed-modal");
-  const voiceModal = wrapper.querySelector("#ai-voice-voice-modal");
+
+  // New feature elements
+  const translateBtn = wrapper.querySelector("#ai-voice-translate-btn");
+  const translateSection = wrapper.querySelector("#ai-voice-translate-section");
+  const translateClose = wrapper.querySelector("#ai-voice-translate-close");
+  const translateSelect = wrapper.querySelector("#ai-voice-translate-select");
+  const translateContent = wrapper.querySelector("#ai-voice-translate-content");
+  const translateLoader = wrapper.querySelector("#ai-voice-translate-loader");
+
+  const readalongBtn = wrapper.querySelector("#ai-voice-readalong-btn");
+  const readalongSection = wrapper.querySelector("#ai-voice-readalong-section");
+  const readalongClose = wrapper.querySelector("#ai-voice-readalong-close");
+  const readalongText = wrapper.querySelector("#ai-voice-readalong-text");
+
+  const askaiBtn = wrapper.querySelector("#ai-voice-askai-btn");
+  const askaiSection = wrapper.querySelector("#ai-voice-askai-section");
+  const askaiClose = wrapper.querySelector("#ai-voice-askai-close");
+  const chatMessages = wrapper.querySelector("#ai-voice-chat-messages");
+  const chatInput = wrapper.querySelector("#ai-voice-chat-input");
+  const chatSend = wrapper.querySelector("#ai-voice-chat-send");
 
   // Audio + state
   const audio = new Audio();
   let isGenerating = false;
   let isGeneratingSummary = false;
   let currentTheme = aiVoiceData.theme || "light";
-  let currentSpeed = 1.0;
   let generationAttempts = 0;
   let summaryGenerated = false;
   const maxGenerationAttempts = 2;
   let audioHadError = false;
-
-  const voices = {
-    google: [
-      { id: "en-US-Studio-O", name: "Studio (Female)" },
-      { id: "en-US-Studio-M", name: "Studio (Male)" },
-      { id: "en-US-Neural2-J", name: "Neural (Male)" },
-      { id: "en-US-Neural2-F", name: "Neural (Female)" },
-      { id: "en-US-Wavenet-F", name: "WaveNet (Female)" },
-      { id: "en-US-Wavenet-D", name: "WaveNet (Male)" },
-    ],
-    gemini: [
-      { id: "Kore", name: "Kore (Firm)" },
-      { id: "Puck", name: "Puck (Upbeat)" },
-      { id: "Charon", name: "Charon (Informative)" },
-      { id: "Leda", name: "Leda (Youthful)" },
-      { id: "Enceladus", name: "Enceladus (Breathy)" },
-    ],
-    openai: [
-      { id: "alloy", name: "Alloy" },
-      { id: "echo", name: "Echo" },
-      { id: "fable", name: "Fable" },
-      { id: "onyx", name: "Onyx" },
-      { id: "nova", name: "Nova" },
-      { id: "shimmer", name: "Shimmer" },
-    ],
-  };
+  let isReadAlongActive = false;
+  let readAlongInterval = null;
 
   // Helpers
   const formatTime = (seconds) => {
@@ -93,17 +82,10 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBar.style.background = `linear-gradient(to right, ${finalAccent} ${percentage}%, ${finalBg} ${percentage}%)`;
   };
 
-  // UI state setters (single definitions)
+  // UI state setters
   const updateTheme = (theme) => {
     currentTheme = theme;
     playerContainer.dataset.theme = theme;
-    if (theme === "dark") {
-      sunIcon.style.display = "none";
-      moonIcon.style.display = "block";
-    } else {
-      moonIcon.style.display = "none";
-      sunIcon.style.display = "block";
-    }
     updateProgressBarUI();
   };
 
@@ -139,8 +121,6 @@ document.addEventListener("DOMContentLoaded", () => {
     summaryGenerated = true;
     isGeneratingSummary = false;
     summaryBtn.disabled = false;
-
-    // Force-hide the loader and show the check
     summaryLoader.style.display = "none";
     summaryIcon.style.display = "none";
     summaryCheck.style.display = "block";
@@ -152,23 +132,42 @@ document.addEventListener("DOMContentLoaded", () => {
     articleTitleEl.textContent = aiVoiceData.text.generating_audio;
     articleTitleEl.style.color = "";
   };
+
   const showError = (message) => {
     articleTitleEl.textContent = "Error: " + message;
     articleTitleEl.style.color = "#ef4444";
     console.error("AI Voice Error:", message);
     resetPlayerState();
   };
+
   const showSummaryError = (message) => {
     summaryContent.innerHTML =
       '<p style="color: #ef4444;">Error: ' + message + "</p>";
     console.error("AI Voice Summary Error:", message);
-    // Also make sure loader is hidden
     summaryLoader.style.display = "none";
     isGeneratingSummary = false;
     summaryBtn.disabled = false;
     summaryIcon.style.display = "block";
     summaryCheck.style.display = "none";
     summaryBtn.classList.remove("generated");
+  };
+
+  // Toggle feature sections
+  const toggleFeatureSection = (section) => {
+    const allSections = [
+      summarySection,
+      translateSection,
+      readalongSection,
+      askaiSection,
+    ];
+    allSections.forEach((s) => {
+      if (s === section) {
+        const isVisible = s.style.display !== "none";
+        s.style.display = isVisible ? "none" : "block";
+      } else {
+        s.style.display = "none";
+      }
+    });
   };
 
   // Actions
@@ -188,9 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!summaryGenerated) {
       generateSummary();
     } else {
-      // Toggle visibility and ensure spinner is off
-      summarySection.style.display =
-        summarySection.style.display === "none" ? "block" : "none";
+      toggleFeatureSection(summarySection);
       summaryLoader.style.display = "none";
     }
   };
@@ -202,8 +199,8 @@ document.addEventListener("DOMContentLoaded", () => {
     summaryBtn.disabled = true;
     summaryIcon.style.display = "none";
     summaryLoader.style.display = "block";
+    summarySection.style.display = "block";
 
-    // Server extracts full post content
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -216,8 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
       success: function (response) {
         if (response.success) {
           summaryContent.innerHTML = response.data.summary;
-          summarySection.style.display = "block";
-          setSummaryGeneratedUI(); // <- ensure spinner off + check shown
+          setSummaryGeneratedUI();
         } else {
           const errorMsg =
             response.data?.message || "Summary generation failed.";
@@ -245,10 +241,10 @@ document.addEventListener("DOMContentLoaded", () => {
     playIcon.style.display = "none";
     loader.style.display = "block";
 
-    articleTitleEl.textContent = "Generating audio...";
+    articleTitleEl.textContent =
+      aiVoiceData.text.generating_audio || "Generating audio...";
     articleTitleEl.style.color = "";
 
-    // Server extracts full post content
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -260,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
       timeout: 180000,
       success: function (response) {
         if (response.success) {
-          audio.src = response.data.audioUrl; // admin-ajax streaming URL
+          audio.src = response.data.audioUrl;
           clearError();
           audio.play().catch((error) => {
             console.warn("AI Voice: Auto-play prevented by browser:", error);
@@ -319,14 +315,275 @@ document.addEventListener("DOMContentLoaded", () => {
     generationAttempts = 0;
   };
 
-  // Events
+  // ============================================
+  // TRANSLATE FEATURE
+  // ============================================
+  const initTranslate = () => {
+    toggleFeatureSection(translateSection);
+
+    // Load original article text on first open
+    if (!translateContent.dataset.originalText) {
+      loadOriginalArticleText();
+    }
+  };
+
+  const loadOriginalArticleText = () => {
+    // Get article content from the page
+    const articleContent = document.querySelector(
+      ".entry-content, .post-content, article, main"
+    );
+    if (articleContent) {
+      const textContent =
+        articleContent.innerText || articleContent.textContent;
+      translateContent.dataset.originalText = textContent.trim();
+
+      // Show original text
+      translateContent.innerHTML = `<p style="margin-bottom: 12px;"><strong>Original Article:</strong></p><p style="line-height: 1.8;">${textContent.substring(
+        0,
+        1000
+      )}${textContent.length > 1000 ? "..." : ""}</p>`;
+      translateContent.classList.add("active");
+    }
+  };
+
+  const translateArticle = (targetLang) => {
+    if (targetLang === "en") {
+      // Show original
+      loadOriginalArticleText();
+      return;
+    }
+
+    const originalText = translateContent.dataset.originalText;
+    if (!originalText) {
+      console.error("No original text found");
+      return;
+    }
+
+    // Show loading
+    translateLoader.style.display = "flex";
+    translateContent.classList.remove("active");
+
+    // Use Google Translate API via AJAX
+    jQuery.ajax({
+      url: aiVoiceData.ajax_url,
+      type: "POST",
+      data: {
+        action: "ai_voice_translate_text",
+        nonce: aiVoiceData.nonce,
+        post_id: aiVoiceData.post_id,
+        text: originalText,
+        target_lang: targetLang,
+      },
+      timeout: 30000,
+      success: function (response) {
+        translateLoader.style.display = "none";
+        if (response.success) {
+          translateContent.innerHTML = `<p style="margin-bottom: 12px;"><strong>Translated Article:</strong></p><p style="line-height: 1.8;">${response.data.translated_text}</p>`;
+          translateContent.classList.add("active");
+        } else {
+          translateContent.innerHTML = `<p style="color: #ef4444;">Translation failed: ${response.data.message}</p>`;
+          translateContent.classList.add("active");
+        }
+      },
+      error: function () {
+        translateLoader.style.display = "none";
+        translateContent.innerHTML =
+          '<p style="color: #ef4444;">Translation request failed. Please try again.</p>';
+        translateContent.classList.add("active");
+      },
+    });
+  };
+
+  // ============================================
+  // READ ALONG FEATURE
+  // ============================================
+  const initReadAlong = () => {
+    toggleFeatureSection(readalongSection);
+
+    // Load article text on first open
+    if (!readalongText.dataset.loaded) {
+      loadArticleForReadAlong();
+      readalongText.dataset.loaded = "true";
+    }
+
+    // Start audio if not playing
+    if (audio.paused && audio.src) {
+      audio.play();
+    } else if (!audio.src) {
+      generateAudio();
+    }
+
+    // Enable read-along highlighting
+    isReadAlongActive = true;
+  };
+
+  const loadArticleForReadAlong = () => {
+    const articleContent = document.querySelector(
+      ".entry-content, .post-content, article, main"
+    );
+    if (articleContent) {
+      // Get text and split into sentences
+      const textContent =
+        articleContent.innerText || articleContent.textContent;
+      const sentences = textContent.split(/(?<=[.!?])\s+/);
+
+      // Wrap each sentence in a span
+      const wrappedText = sentences
+        .map(
+          (sentence, index) =>
+            `<span class="sentence" data-index="${index}">${sentence.trim()}</span>`
+        )
+        .join(" ");
+
+      readalongText.innerHTML = wrappedText;
+    }
+  };
+
+  const updateReadAlongHighlight = () => {
+    if (!isReadAlongActive || !audio.duration) return;
+
+    const sentences = readalongText.querySelectorAll(".sentence");
+    const progress = audio.currentTime / audio.duration;
+    const currentIndex = Math.floor(progress * sentences.length);
+
+    // Remove all highlights
+    sentences.forEach((s) => s.classList.remove("highlight"));
+
+    // Highlight current sentence
+    if (sentences[currentIndex]) {
+      sentences[currentIndex].classList.add("highlight");
+
+      // Auto-scroll to keep highlighted text visible
+      sentences[currentIndex].scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  };
+
+  // ============================================
+  // ASK AI CHAT FEATURE
+  // ============================================
+  const initAskAI = () => {
+    toggleFeatureSection(askaiSection);
+
+    // Focus on input
+    setTimeout(() => chatInput.focus(), 100);
+  };
+
+  const sendChatMessage = () => {
+    const message = chatInput.value.trim();
+    if (!message) return;
+
+    // Add user message to chat
+    addChatMessage(message, "user");
+    chatInput.value = "";
+    chatInput.disabled = true;
+    chatSend.disabled = true;
+
+    // Send to AI via AJAX
+    jQuery.ajax({
+      url: aiVoiceData.ajax_url,
+      type: "POST",
+      data: {
+        action: "ai_voice_ask_ai",
+        nonce: aiVoiceData.nonce,
+        post_id: aiVoiceData.post_id,
+        message: message,
+      },
+      timeout: 45000,
+      success: function (response) {
+        chatInput.disabled = false;
+        chatSend.disabled = false;
+        chatInput.focus();
+
+        if (response.success) {
+          addChatMessage(response.data.reply, "ai");
+        } else {
+          addChatMessage(
+            "Sorry, I encountered an error. Please try again.",
+            "ai"
+          );
+        }
+      },
+      error: function () {
+        chatInput.disabled = false;
+        chatSend.disabled = false;
+        addChatMessage(
+          "Connection error. Please check your internet and try again.",
+          "ai"
+        );
+      },
+    });
+  };
+
+  const addChatMessage = (text, sender) => {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `chat-message ${sender}-message`;
+
+    const avatar = document.createElement("div");
+    avatar.className = `message-avatar ${sender}-avatar`;
+    avatar.textContent = sender === "user" ? "👤" : "🤖";
+
+    const content = document.createElement("div");
+    content.className = "message-content";
+    content.textContent = text;
+
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(content);
+
+    chatMessages.appendChild(messageDiv);
+
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  };
+
+  // ============================================
+  // EVENT LISTENERS
+  // ============================================
+
+  // Summary
   summaryBtn.addEventListener("click", () => toggleSummary());
-  playPauseBtn.addEventListener("click", () => togglePlayPause());
   summaryClose.addEventListener(
     "click",
     () => (summarySection.style.display = "none")
   );
 
+  // Play/Pause
+  playPauseBtn.addEventListener("click", () => togglePlayPause());
+
+  // Translate
+  translateBtn.addEventListener("click", () => initTranslate());
+  translateClose.addEventListener(
+    "click",
+    () => (translateSection.style.display = "none")
+  );
+  translateSelect.addEventListener("change", (e) =>
+    translateArticle(e.target.value)
+  );
+
+  // Read Along
+  readalongBtn.addEventListener("click", () => initReadAlong());
+  readalongClose.addEventListener("click", () => {
+    readalongSection.style.display = "none";
+    isReadAlongActive = false;
+  });
+
+  // Ask AI
+  askaiBtn.addEventListener("click", () => initAskAI());
+  askaiClose.addEventListener(
+    "click",
+    () => (askaiSection.style.display = "none")
+  );
+  chatSend.addEventListener("click", () => sendChatMessage());
+  chatInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+
+  // Audio events
   audio.addEventListener("play", () => {
     playIcon.style.display = "none";
     pauseIcon.style.display = "block";
@@ -334,23 +591,34 @@ document.addEventListener("DOMContentLoaded", () => {
     playPauseBtn.disabled = false;
     loader.style.display = "none";
   });
+
   audio.addEventListener("pause", () => {
     pauseIcon.style.display = "none";
     playIcon.style.display = "block";
   });
+
   audio.addEventListener("ended", () => {
     audio.currentTime = 0;
     audio.pause();
+    isReadAlongActive = false;
   });
+
   audio.addEventListener("loadedmetadata", () => {
     totalTimeEl.textContent = formatTime(audio.duration);
     progressBar.max = audio.duration;
   });
+
   audio.addEventListener("timeupdate", () => {
     currentTimeEl.textContent = formatTime(audio.currentTime);
     progressBar.value = audio.currentTime;
     updateProgressBarUI();
+
+    // Update read-along highlighting
+    if (isReadAlongActive) {
+      updateReadAlongHighlight();
+    }
   });
+
   audio.addEventListener("error", (e) => {
     if (audioHadError) return;
     audioHadError = true;
@@ -365,6 +633,7 @@ document.addEventListener("DOMContentLoaded", () => {
       audioHadError = false;
     }, 2000);
   });
+
   audio.addEventListener("loadstart", () => clearError());
 
   progressBar.addEventListener("input", (e) => {
@@ -374,70 +643,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  themeToggle.addEventListener("click", () =>
-    updateTheme(currentTheme === "light" ? "dark" : "light")
-  );
-
-  speedBtn.addEventListener("click", () => {
-    const speedContainer = speedModal.querySelector("#ai-voice-speed-options");
-    speedContainer.innerHTML = "";
-    [0.75, 1.0, 1.25, 1.5, 2.0].forEach((s) => {
-      const btn = document.createElement("button");
-      btn.className = s === currentSpeed ? "active" : "";
-      btn.textContent = `${s}x`;
-      btn.onclick = () => {
-        currentSpeed = s;
-        audio.playbackRate = currentSpeed;
-        speedBtn.textContent = `${s}x`;
-        speedModal.style.display = "none";
-        speedContainer
-          .querySelectorAll("button")
-          .forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-      };
-      speedContainer.appendChild(btn);
-    });
-    speedModal.style.display = "flex";
-  });
-
-  voiceBtn.addEventListener("click", () => {
-    const voiceContainer = voiceModal.querySelector("#ai-voice-voice-options");
-    voiceContainer.innerHTML = "";
-    const currentVoices = voices[aiVoiceData.aiService] || voices.google;
-    currentVoices.forEach((voice, index) => {
-      const btn = document.createElement("button");
-      btn.className = index === 0 ? "active" : "";
-      btn.textContent = voice.name;
-      btn.onclick = () => {
-        voiceModal.style.display = "none";
-      };
-      voiceContainer.appendChild(btn);
-    });
-    voiceModal.style.display = "flex";
-  });
-
-  // Close modals when clicking outside
-  speedModal.addEventListener("click", (e) => {
-    if (e.target === speedModal) speedModal.style.display = "none";
-  });
-  voiceModal.addEventListener("click", (e) => {
-    if (e.target === voiceModal) voiceModal.style.display = "none";
-  });
-
-  // Close modals on Escape key
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      speedModal.style.display = "none";
-      voiceModal.style.display = "none";
-    }
-  });
-
   // Init
   updateTheme(currentTheme);
   updateAILogo();
   articleTitleEl.textContent = aiVoiceData.text.listen_to_article;
   updateProgressBarUI();
-  audio.playbackRate = currentSpeed;
 
-  console.log("AI Voice Player with Summary initialized successfully");
+  console.log("AI Voice Player with new features initialized successfully");
 });
