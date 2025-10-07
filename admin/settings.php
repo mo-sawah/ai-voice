@@ -295,6 +295,114 @@ class AIVoice_Settings {
                     </tbody>
                 </table>
 
+                <h2 class="title">🤖 Auto-Generation Settings</h2>
+                <p>Automatically generate audio for newly published posts with smart rate limiting.</p>
+                <table class="form-table">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[auto_generate_on_publish]">Enable Auto-Generation</label></th>
+                            <td>
+                                <input type="checkbox" name="ai_voice_settings[auto_generate_on_publish]" value="1" <?php checked( isset($options['auto_generate_on_publish']) ? $options['auto_generate_on_publish'] : 0, 1 ); ?>>
+                                <span class="description">Automatically generate audio when a new post is published</span>
+                                
+                                <?php
+                                // Show queue status
+                                if (class_exists('AIVoice_Auto_Generation')) {
+                                    $queue_status = AIVoice_Auto_Generation::get_queue_status();
+                                    ?>
+                                    <div style="margin-top: 10px; padding: 10px; background: #f6f7f7; border-left: 3px solid #2271b1; border-radius: 4px;">
+                                        <strong>📊 Current Queue Status:</strong><br>
+                                        <ul style="margin: 5px 0 0 20px;">
+                                            <li>Posts in queue: <strong><?php echo $queue_status['queue_size']; ?></strong></li>
+                                            <li>Processed this hour: <strong><?php echo $queue_status['processed_this_hour']; ?></strong></li>
+                                            <li>Last processed: <strong><?php echo $queue_status['last_processed']; ?></strong></li>
+                                            <li>Next scheduled: <strong><?php echo $queue_status['next_scheduled']; ?></strong></li>
+                                        </ul>
+                                        <p style="margin: 10px 0 0;">
+                                            <a href="<?php echo admin_url('options-general.php?page=ai-voice-bulk'); ?>" class="button">
+                                                📊 View Bulk Generation Dashboard
+                                            </a>
+                                        </p>
+                                    </div>
+                                    <?php
+                                }
+                                ?>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[auto_generate_delay]">Generation Delay (seconds)</label></th>
+                            <td>
+                                <input type="number" name="ai_voice_settings[auto_generate_delay]" min="60" max="600" value="<?php echo esc_attr( $options['auto_generate_delay'] ?? 120 ); ?>" class="small-text">
+                                <p class="description">Wait this many seconds after publishing before generating audio. Default: 120 seconds (2 minutes). Recommended: 120-300 seconds.</p>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[bulk_rate_limit]">Rate Limit (seconds between posts)</label></th>
+                            <td>
+                                <input type="number" name="ai_voice_settings[bulk_rate_limit]" min="30" max="300" value="<?php echo esc_attr( $options['bulk_rate_limit'] ?? 60 ); ?>" class="small-text">
+                                <p class="description">Minimum seconds to wait between generating audio for each post. Default: 60 seconds.</p>
+                                <p class="description">
+                                    <strong>Recommended settings:</strong><br>
+                                    • Shared hosting: 90-120 seconds<br>
+                                    • VPS: 60 seconds<br>
+                                    • Dedicated server: 30-60 seconds
+                                </p>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <th scope="row"><label for="ai_voice_settings[bulk_max_per_hour]">Max Posts Per Hour</label></th>
+                            <td>
+                                <input type="number" name="ai_voice_settings[bulk_max_per_hour]" min="1" max="120" value="<?php echo esc_attr( $options['bulk_max_per_hour'] ?? 30 ); ?>" class="small-text">
+                                <p class="description">Maximum number of posts to process per hour. Default: 30 posts/hour.</p>
+                                <p class="description">
+                                    <strong>Recommended settings:</strong><br>
+                                    • Shared hosting: 20-30 posts/hour<br>
+                                    • VPS: 40-60 posts/hour<br>
+                                    • Dedicated server: 60-100 posts/hour
+                                </p>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <th scope="row">⚠️ Important Notes</th>
+                            <td>
+                                <div style="padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                                    <ul style="margin: 0; padding-left: 20px;">
+                                        <li><strong>Smart Queue System:</strong> Posts are added to a queue and processed one at a time.</li>
+                                        <li><strong>No Server Overload:</strong> Rate limiting prevents overwhelming your hosting or PC.</li>
+                                        <li><strong>Background Processing:</strong> Generation happens in the background via WordPress Cron.</li>
+                                        <li><strong>Cache Forever:</strong> Once generated, audio is cached permanently (never expires).</li>
+                                        <li><strong>Manual Control:</strong> Use the <a href="<?php echo admin_url('options-general.php?page=ai-voice-bulk'); ?>">Bulk Generation page</a> for existing posts.</li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <th scope="row">🎯 Performance Impact</th>
+                            <td>
+                                <div style="padding: 15px; background: #e7f3ff; border-left: 4px solid #2271b1; border-radius: 4px;">
+                                    <strong>Estimated Resource Usage (per post):</strong>
+                                    <ul style="margin: 10px 0 0 20px;">
+                                        <li>Hosting CPU: 5-10 seconds</li>
+                                        <li>Hosting Memory: ~50MB peak</li>
+                                        <li>PC (TTS Server): 2-5 seconds</li>
+                                        <li>Network: ~1-2MB audio file</li>
+                                    </ul>
+                                    <p style="margin: 10px 0 0;">
+                                        With default settings (30 posts/hour), this means:<br>
+                                        • <strong>2.5-5 minutes</strong> of PC usage per hour<br>
+                                        • <strong>30-60MB</strong> of data transferred per hour
+                                    </p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
                 <h2 class="title">Default Player Settings</h2>
                 <p>These are the default settings for the audio player. They can be overridden for individual posts.</p>
                  <table class="form-table">
