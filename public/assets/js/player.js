@@ -54,6 +54,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let isReadAlongActive = false;
   let readAlongInterval = null;
 
+  // 🆕 Translation state
+  let originalArticleHTML = null;
+  let isTranslated = false;
+  let currentLanguage = "en";
+
+  // 🆕 Get the actual article container on the page
+  const articleContainer = document.querySelector(
+    ".entry-content, .post-content, article.post, main article, .article-content"
+  );
+
   // Helpers
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -316,54 +326,74 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ============================================
-  // TRANSLATE FEATURE
+  // 🆕 TRANSLATE FEATURE - FIXED
   // ============================================
   const initTranslate = () => {
     toggleFeatureSection(translateSection);
 
-    // Load original article text on first open
-    if (!translateContent.dataset.originalText) {
-      loadOriginalArticleText();
+    // Store original HTML on first open
+    if (!originalArticleHTML && articleContainer) {
+      originalArticleHTML = articleContainer.innerHTML;
     }
-  };
 
-  const loadOriginalArticleText = () => {
-    // Get article content from the page
-    const articleContent = document.querySelector(
-      ".entry-content, .post-content, article, main"
-    );
-    if (articleContent) {
-      const textContent =
-        articleContent.innerText || articleContent.textContent;
-      translateContent.dataset.originalText = textContent.trim();
-
-      // Show original text
-      translateContent.innerHTML = `<p style="margin-bottom: 12px;"><strong>Original Article:</strong></p><p style="line-height: 1.8;">${textContent.substring(
-        0,
-        1000
-      )}${textContent.length > 1000 ? "..." : ""}</p>`;
+    // Show current state
+    if (isTranslated) {
+      translateContent.innerHTML = `<p style="color: #2271b1; font-weight: 500;">✓ Article is currently translated to ${getLanguageName(
+        currentLanguage
+      )}</p>`;
+      translateContent.classList.add("active");
+    } else {
+      translateContent.innerHTML = `<p style="color: #64748b;">Select a language to translate the entire article</p>`;
       translateContent.classList.add("active");
     }
   };
 
+  const getLanguageName = (code) => {
+    const names = {
+      en: "English",
+      es: "Spanish",
+      fr: "French",
+      de: "German",
+      ar: "Arabic",
+      "zh-CN": "Chinese",
+      ja: "Japanese",
+      ru: "Russian",
+      pt: "Portuguese",
+      it: "Italian",
+      ko: "Korean",
+      nl: "Dutch",
+      tr: "Turkish",
+      pl: "Polish",
+      hi: "Hindi",
+    };
+    return names[code] || code;
+  };
+
   const translateArticle = (targetLang) => {
-    if (targetLang === "en") {
-      // Show original
-      loadOriginalArticleText();
+    if (!articleContainer) {
+      alert("Could not find article content on this page");
       return;
     }
 
-    const originalText = translateContent.dataset.originalText;
-    if (!originalText) {
-      console.error("No original text found");
+    // If selecting English, restore original
+    if (targetLang === "en") {
+      if (originalArticleHTML) {
+        articleContainer.innerHTML = originalArticleHTML;
+        isTranslated = false;
+        currentLanguage = "en";
+        translateContent.innerHTML = `<p style="color: #2271b1;">✓ Restored to original English</p>`;
+        translateContent.classList.add("active");
+      }
       return;
     }
 
     // Show loading
     translateLoader.style.display = "flex";
     translateContent.classList.remove("active");
+    translateContent.innerHTML = "";
 
-    // Use Google Translate API via AJAX
+    console.log("Translating article to:", targetLang);
+
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -371,33 +401,58 @@ document.addEventListener("DOMContentLoaded", () => {
         action: "ai_voice_translate_text",
         nonce: aiVoiceData.nonce,
         post_id: aiVoiceData.post_id,
-        text: originalText,
         target_lang: targetLang,
       },
-      timeout: 30000,
+      timeout: 60000,
       success: function (response) {
         translateLoader.style.display = "none";
         if (response.success) {
-          translateContent.innerHTML = `<p style="margin-bottom: 12px;"><strong>Translated Article:</strong></p><p style="line-height: 1.8;">${response.data.translated_text}</p>`;
+          // Replace article content
+          const translatedText = response.data.translated_text;
+
+          // Split by paragraphs and wrap each in <p> tags
+          const paragraphs = translatedText
+            .split("\n\n")
+            .filter((p) => p.trim())
+            .map((p) => `<p>${p.trim()}</p>`)
+            .join("");
+
+          articleContainer.innerHTML = paragraphs;
+          isTranslated = true;
+          currentLanguage = targetLang;
+
+          translateContent.innerHTML = `<p style="color: #10b981; font-weight: 500;">✓ Article translated to ${getLanguageName(
+            targetLang
+          )}</p>`;
           translateContent.classList.add("active");
         } else {
-          translateContent.innerHTML = `<p style="color: #ef4444;">Translation failed: ${response.data.message}</p>`;
+          translateContent.innerHTML = `<p style="color: #ef4444;">Translation failed: ${
+            response.data.message || "Unknown error"
+          }</p>`;
           translateContent.classList.add("active");
         }
       },
-      error: function () {
+      error: function (jqXHR, textStatus) {
         translateLoader.style.display = "none";
-        translateContent.innerHTML =
-          '<p style="color: #ef4444;">Translation request failed. Please try again.</p>';
+        let errorMsg = "Translation request failed.";
+        if (textStatus === "timeout") {
+          errorMsg = "Translation timed out. Try again.";
+        }
+        translateContent.innerHTML = `<p style="color: #ef4444;">${errorMsg}</p>`;
         translateContent.classList.add("active");
       },
     });
   };
 
   // ============================================
-  // READ ALONG FEATURE
+  // 🆕 READ ALONG FEATURE - FIXED
   // ============================================
   const initReadAlong = () => {
+    if (!articleContainer) {
+      alert("Could not find article content on this page");
+      return;
+    }
+
     toggleFeatureSection(readalongSection);
 
     // Load article text on first open
@@ -418,31 +473,54 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const loadArticleForReadAlong = () => {
-    const articleContent = document.querySelector(
-      ".entry-content, .post-content, article, main"
-    );
-    if (articleContent) {
-      // Get text and split into sentences
-      const textContent =
-        articleContent.innerText || articleContent.textContent;
-      const sentences = textContent.split(/(?<=[.!?])\s+/);
+    if (!articleContainer) return;
 
-      // Wrap each sentence in a span
-      const wrappedText = sentences
-        .map(
-          (sentence, index) =>
-            `<span class="sentence" data-index="${index}">${sentence.trim()}</span>`
-        )
-        .join(" ");
+    // Get all paragraphs from article
+    const paragraphs = articleContainer.querySelectorAll("p");
 
-      readalongText.innerHTML = wrappedText;
+    if (paragraphs.length === 0) {
+      readalongText.innerHTML =
+        "<p>No article content found for read-along</p>";
+      return;
     }
+
+    let sentenceIndex = 0;
+    let allSentences = [];
+
+    paragraphs.forEach((p) => {
+      const text = p.innerText || p.textContent;
+      if (!text.trim()) return;
+
+      // Split into sentences
+      const sentences = text.split(/(?<=[.!?])\s+/);
+
+      sentences.forEach((sentence) => {
+        if (sentence.trim().length > 10) {
+          allSentences.push({
+            text: sentence.trim(),
+            index: sentenceIndex++,
+          });
+        }
+      });
+    });
+
+    // Render sentences with highlighting capability
+    const wrappedText = allSentences
+      .map(
+        (s) =>
+          `<span class="sentence" data-index="${s.index}">${s.text}</span> `
+      )
+      .join("");
+
+    readalongText.innerHTML = wrappedText;
   };
 
   const updateReadAlongHighlight = () => {
     if (!isReadAlongActive || !audio.duration) return;
 
     const sentences = readalongText.querySelectorAll(".sentence");
+    if (sentences.length === 0) return;
+
     const progress = audio.currentTime / audio.duration;
     const currentIndex = Math.floor(progress * sentences.length);
 
@@ -462,7 +540,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ============================================
-  // ASK AI CHAT FEATURE
+  // 🆕 ASK AI CHAT FEATURE - FIXED
   // ============================================
   const initAskAI = () => {
     toggleFeatureSection(askaiSection);
@@ -481,7 +559,9 @@ document.addEventListener("DOMContentLoaded", () => {
     chatInput.disabled = true;
     chatSend.disabled = true;
 
-    // Send to AI via AJAX
+    console.log("Sending chat message:", message);
+
+    // Send to AI via AJAX with full context
     jQuery.ajax({
       url: aiVoiceData.ajax_url,
       type: "POST",
@@ -497,22 +577,31 @@ document.addEventListener("DOMContentLoaded", () => {
         chatSend.disabled = false;
         chatInput.focus();
 
+        console.log("Chat response:", response);
+
         if (response.success) {
           addChatMessage(response.data.reply, "ai");
         } else {
           addChatMessage(
-            "Sorry, I encountered an error. Please try again.",
+            "Sorry, I encountered an error: " +
+              (response.data.message || "Unknown error"),
             "ai"
           );
         }
       },
-      error: function () {
+      error: function (jqXHR, textStatus) {
         chatInput.disabled = false;
         chatSend.disabled = false;
-        addChatMessage(
-          "Connection error. Please check your internet and try again.",
-          "ai"
-        );
+        console.error("Chat error:", textStatus, jqXHR);
+
+        let errorMsg = "Connection error. Please try again.";
+        if (textStatus === "timeout") {
+          errorMsg = "Request timed out. Please try again.";
+        } else if (jqXHR.status === 500) {
+          errorMsg = "Server error. Check your API configuration.";
+        }
+
+        addChatMessage(errorMsg, "ai");
       },
     });
   };

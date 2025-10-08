@@ -345,15 +345,29 @@ class AIVoice_Public {
         check_ajax_referer('ai_voice_nonce', 'nonce');
 
         $post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
-        $text = isset($_POST['text']) ? sanitize_textarea_field($_POST['text']) : '';
         $target_lang = isset($_POST['target_lang']) ? sanitize_text_field($_POST['target_lang']) : 'en';
 
-        if (!$post_id || empty($text)) {
-            wp_send_json_error(['message' => 'Invalid parameters']);
+        if (!$post_id) {
+            wp_send_json_error(['message' => 'Invalid post ID']);
+        }
+
+        // Get the full article content from the post
+        $raw_text = $this->get_post_plain_text($post_id);
+        
+        if (empty($raw_text) || strlen(trim($raw_text)) < 50) {
+            wp_send_json_error(['message' => 'Not enough content to translate']);
+        }
+
+        // Clean the text
+        $raw_text = $this->strip_leading_parenthetical_dateline($raw_text);
+        
+        // Limit to 5000 characters to avoid token limits
+        if (strlen($raw_text) > 5000) {
+            $raw_text = substr($raw_text, 0, 5000) . '...';
         }
 
         // Check cache first
-        $cache_key = md5($text . $target_lang);
+        $cache_key = md5($raw_text . $target_lang);
         $cached_translation = get_transient('ai_voice_translation_' . $cache_key);
         
         if ($cached_translation !== false) {
@@ -365,11 +379,11 @@ class AIVoice_Public {
         $summary_api = $this->settings['summary_api'] ?? 'openrouter';
         
         if ($summary_api === 'openrouter') {
-            $result = $this->translate_with_openrouter($text, $target_lang);
+            $result = $this->translate_with_openrouter($raw_text, $target_lang);
         } else if ($summary_api === 'chatgpt') {
-            $result = $this->translate_with_chatgpt($text, $target_lang);
+            $result = $this->translate_with_chatgpt($raw_text, $target_lang);
         } else if ($summary_api === 'local_ollama') {
-            $result = $this->translate_with_local_ollama($text, $target_lang);
+            $result = $this->translate_with_local_ollama($raw_text, $target_lang);
         } else {
             wp_send_json_error(['message' => 'No translation API configured']);
         }
