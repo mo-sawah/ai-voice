@@ -55,11 +55,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let readAlongInterval = null;
 
   // 🆕 Translation state
-  let originalArticleHTML = null;
   let isTranslated = false;
   let currentLanguage = "en";
 
-  // 🆕 Get the actual article container on the page
+  // 🆕 Get the actual article container on the page (for Read Along only)
   const articleContainer = document.querySelector(
     ".entry-content, .post-content, article.post, main article, .article-content"
   );
@@ -326,24 +325,19 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // ============================================
-  // 🆕 TRANSLATE FEATURE - FIXED
+  // 🆕 TRANSLATE FEATURE - FIXED (Dropdown Only)
   // ============================================
   const initTranslate = () => {
     toggleFeatureSection(translateSection);
 
-    // Store original HTML on first open
-    if (!originalArticleHTML && articleContainer) {
-      originalArticleHTML = articleContainer.innerHTML;
-    }
-
-    // Show current state
+    // Show initial state
     if (isTranslated) {
-      translateContent.innerHTML = `<p style="color: #2271b1; font-weight: 500;">✓ Article is currently translated to ${getLanguageName(
-        currentLanguage
-      )}</p>`;
-      translateContent.classList.add("active");
+      // Already translated - show current translation
+      // Translation content is already displayed from previous translation
     } else {
-      translateContent.innerHTML = `<p style="color: #64748b;">Select a language to translate the entire article</p>`;
+      translateContent.innerHTML = `<div style="padding: 12px; background: #f0f6fc; border-radius: 8px; border: 1px solid #d0e4f7;">
+        <p style="margin: 0; color: #64748b;">Select a language above to translate the article. Translation will appear here.</p>
+      </div>`;
       translateContent.classList.add("active");
     }
   };
@@ -370,20 +364,12 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const translateArticle = (targetLang) => {
-    if (!articleContainer) {
-      alert("Could not find article content on this page");
-      return;
-    }
-
-    // If selecting English, restore original
+    // If selecting English (Original), show original in dropdown
     if (targetLang === "en") {
-      if (originalArticleHTML) {
-        articleContainer.innerHTML = originalArticleHTML;
-        isTranslated = false;
-        currentLanguage = "en";
-        translateContent.innerHTML = `<p style="color: #2271b1;">✓ Restored to original English</p>`;
-        translateContent.classList.add("active");
-      }
+      translateContent.innerHTML = `<div style="padding: 12px; background: #f0f6fc; border-radius: 8px; border: 1px solid #d0e4f7;">
+        <p style="margin: 0; color: #2271b1; font-weight: 500;">📄 Original Article (English)</p>
+      </div>`;
+      translateContent.classList.add("active");
       return;
     }
 
@@ -407,24 +393,25 @@ document.addEventListener("DOMContentLoaded", () => {
       success: function (response) {
         translateLoader.style.display = "none";
         if (response.success) {
-          // Replace article content
           const translatedText = response.data.translated_text;
 
-          // Split by paragraphs and wrap each in <p> tags
-          const paragraphs = translatedText
-            .split("\n\n")
-            .filter((p) => p.trim())
-            .map((p) => `<p>${p.trim()}</p>`)
-            .join("");
+          // Display in dropdown (don't replace article)
+          translateContent.innerHTML = `<div style="padding: 16px; background: var(--bg-secondary-light); border-radius: 8px; max-height: 400px; overflow-y: auto; line-height: 1.8;">
+            <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-light);">
+              <strong style="color: var(--accent-light);">✓ Translated to ${getLanguageName(
+                targetLang
+              )}</strong>
+            </div>
+            ${translatedText
+              .split("\n\n")
+              .filter((p) => p.trim())
+              .map((p) => `<p style="margin-bottom: 12px;">${p.trim()}</p>`)
+              .join("")}
+          </div>`;
 
-          articleContainer.innerHTML = paragraphs;
-          isTranslated = true;
-          currentLanguage = targetLang;
-
-          translateContent.innerHTML = `<p style="color: #10b981; font-weight: 500;">✓ Article translated to ${getLanguageName(
-            targetLang
-          )}</p>`;
           translateContent.classList.add("active");
+          currentLanguage = targetLang;
+          isTranslated = true;
         } else {
           translateContent.innerHTML = `<p style="color: #ef4444;">Translation failed: ${
             response.data.message || "Unknown error"
@@ -521,7 +508,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const sentences = readalongText.querySelectorAll(".sentence");
     if (sentences.length === 0) return;
 
-    const progress = audio.currentTime / audio.duration;
+    // Calculate progress with slight advance (0.5 seconds ahead)
+    const adjustedTime = Math.min(audio.currentTime + 0.5, audio.duration);
+    const progress = adjustedTime / audio.duration;
     const currentIndex = Math.floor(progress * sentences.length);
 
     // Remove all highlights
@@ -573,10 +562,6 @@ document.addEventListener("DOMContentLoaded", () => {
       },
       timeout: 45000,
       success: function (response) {
-        chatInput.disabled = false;
-        chatSend.disabled = false;
-        chatInput.focus();
-
         console.log("Chat response:", response);
 
         if (response.success) {
@@ -590,8 +575,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       },
       error: function (jqXHR, textStatus) {
-        chatInput.disabled = false;
-        chatSend.disabled = false;
         console.error("Chat error:", textStatus, jqXHR);
 
         let errorMsg = "Connection error. Please try again.";
@@ -602,6 +585,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         addChatMessage(errorMsg, "ai");
+      },
+      complete: function () {
+        // ALWAYS re-enable input after response (success or error)
+        chatInput.disabled = false;
+        chatSend.disabled = false;
+        chatInput.focus();
       },
     });
   };
