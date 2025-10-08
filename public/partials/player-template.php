@@ -103,21 +103,21 @@ if ( ! defined( 'WPINC' ) ) {
             <div class="feature-content">
                 <div class="language-selector">
                     <select id="ai-voice-translate-select">
-                        <option value="en">🇬🇧 English (Original)</option>
-                        <option value="es">🇪🇸 Spanish - Español</option>
-                        <option value="fr">🇫🇷 French - Français</option>
-                        <option value="de">🇩🇪 German - Deutsch</option>
-                        <option value="ar">🇸🇦 Arabic - العربية</option>
-                        <option value="zh-CN">🇨🇳 Chinese - 中文</option>
-                        <option value="ja">🇯🇵 Japanese - 日本語</option>
-                        <option value="ru">🇷🇺 Russian - Русский</option>
-                        <option value="pt">🇵🇹 Portuguese - Português</option>
-                        <option value="it">🇮🇹 Italian - Italiano</option>
-                        <option value="ko">🇰🇷 Korean - 한국어</option>
-                        <option value="nl">🇳🇱 Dutch - Nederlands</option>
-                        <option value="tr">🇹🇷 Turkish - Türkçe</option>
-                        <option value="pl">🇵🇱 Polish - Polski</option>
-                        <option value="hi">🇮🇳 Hindi - हिन्दी</option>
+                        <option value="en">English (Original)</option>
+                        <option value="es">Spanish - Español</option>
+                        <option value="fr">French - Français</option>
+                        <option value="de">German - Deutsch</option>
+                        <option value="ar">Arabic - العربية</option>
+                        <option value="zh-CN">Chinese - 中文</option>
+                        <option value="ja">Japanese - 日本語</option>
+                        <option value="ru">Russian - Русский</option>
+                        <option value="pt">Portuguese - Português</option>
+                        <option value="it">Italian - Italiano</option>
+                        <option value="ko">Korean - 한국어</option>
+                        <option value="nl">Dutch - Nederlands</option>
+                        <option value="tr">Turkish - Türkçe</option>
+                        <option value="pl">Polish - Polski</option>
+                        <option value="hi">Hindi - हिन्दी</option>
                     </select>
                 </div>
                 <div id="ai-voice-translate-content" class="translated-text">
@@ -144,7 +144,6 @@ if ( ! defined( 'WPINC' ) ) {
                 <div id="ai-voice-readalong-text" class="read-along-text">
                     <!-- Article text will be inserted here -->
                 </div>
-                <p class="feature-note">ℹ️ Text will be highlighted as the audio plays</p>
             </div>
         </div>
 
